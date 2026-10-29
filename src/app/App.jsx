@@ -5,6 +5,11 @@ import { MonthlySummary } from '../features/overview/MonthlySummary.jsx';
 import { OverviewPanel } from '../features/overview/OverviewPanel.jsx';
 import { ExpenseList } from '../features/expenses/ExpenseList.jsx';
 import { ExpenseDialog } from '../features/expenses/ExpenseDialog.jsx';
+import { RecurringExpensesDialog } from '../features/expenses/RecurringExpensesDialog.jsx';
+import {
+  recurringCandidates,
+  copyRecurringExpenses,
+} from '../domain/expenses/recurringExpenses.js';
 import React, { useState, useRef, useEffect } from 'react';
 import { parseMoney, splitExpense } from '../domain/expenses/expenseCalculations.js';
 import { calculateWorkspace } from '../domain/budget/workspaceCalculations.js';
@@ -54,6 +59,7 @@ function FinanceApp({ storageNamespace }) {
     [notice, setNotice] = useState(''),
     [filter, setFilter] = useState('all');
   const dialog = useRef();
+  const [recurringDraft, setRecurringDraft] = useState(null);
   const group = data.groups.find((item) => item.id === groupId) || data.groups[0];
   const selectedGroupId = group?.id || '';
   const scope = mode === 'group' ? (group ? 'group:' + group.id : '') : 'person:' + person;
@@ -100,6 +106,7 @@ function FinanceApp({ storageNamespace }) {
       status: 'pending',
       payer: memberIds.includes(person) ? person : memberIds[0],
       fixed: false,
+      fixedAmountType: 'fixed',
       workspace: scope,
     });
   }
@@ -145,35 +152,27 @@ function FinanceApp({ storageNamespace }) {
   }
 
   function copyFixed() {
-    const previous = new Date(Number(month.slice(0, 4)), Number(month.slice(5)) - 2, 1)
-      .toLocaleDateString('sv-SE')
-      .slice(0, 7);
-    const items = data.expenses.filter(
-      (e) =>
-        e.workspace === scope &&
-        e.fixed &&
-        e.date.startsWith(previous) &&
-        !expenses.some((x) => x.originId === (e.originId || e.id)),
-    );
+    const items = recurringCandidates(data.expenses, scope, month);
     if (!items.length) {
-      setNotice('Nenhuma conta fixa nova encontrada no mês anterior neste espaço.');
+      setNotice('Nenhuma conta recorrente nova encontrada no mês anterior neste espaço.');
       return;
     }
-    const lastDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
-    setData((d) => ({
-      ...d,
-      expenses: [
-        ...d.expenses,
-        ...items.map((e) => ({
-          ...e,
-          id: crypto.randomUUID(),
-          originId: e.originId || e.id,
-          date: month + '-' + String(Math.min(Number(e.date.slice(-2)), lastDay)).padStart(2, '0'),
-          status: 'pending',
-        })),
-      ],
-    }));
-    setNotice(`${items.length} conta(s) fixa(s) copiada(s) como pendente(s).`);
+    setRecurringDraft({ items, month, scope });
+  }
+  function saveRecurring(entries) {
+    let count = 0;
+    setData((current) => {
+      const copies = copyRecurringExpenses(
+        current.expenses,
+        recurringDraft.scope,
+        recurringDraft.month,
+        entries,
+      );
+      count = copies.length;
+      return { ...current, expenses: [...current.expenses, ...copies] };
+    });
+    setRecurringDraft(null);
+    setNotice(`${count} conta(s) recorrente(s) adicionada(s) como pendente(s).`);
   }
   let preview = null,
     previewError = '';
@@ -400,6 +399,14 @@ function FinanceApp({ storageNamespace }) {
           </span>
         </footer>
       </main>
+      {recurringDraft && (
+        <RecurringExpensesDialog
+          items={recurringDraft.items}
+          month={recurringDraft.month}
+          onClose={() => setRecurringDraft(null)}
+          onSave={saveRecurring}
+        />
+      )}
       {draft && (
         <ExpenseDialog
           {...{

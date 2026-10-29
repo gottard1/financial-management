@@ -15,6 +15,8 @@ Os dados pessoais e os arquivos de comprovantes continuam locais, separados por 
 5. Compartilhe o endereço do site com o convidado. O sistema **não envia e-mail de convite**: os convites ficam disponíveis dentro do aplicativo, inclusive para contas criadas posteriormente. A confirmação de e-mail é enviada pelo Firebase quando a pessoa clica em **Enviar confirmação**.
 6. O convidado entra com o e-mail informado, confirma o endereço, clica em **Já confirmei meu e-mail** e aceita o convite. Google normalmente já fornece e-mail verificado. O aceite preserva o ID do participante e todo seu histórico no grupo.
 
+A área de acesso está separada em **Convidar e gerenciar** (formulário, convites enviados e atualização dos dados), **Convites recebidos** (confirmação do e-mail e aceite) e **Grupos compartilhados** (consulta de despesas e repasses). Os contadores indicam convites pendentes e grupos recebidos; após o aceite, a consulta do grupo abre automaticamente.
+
 ### Comportamento e limites
 
 - O e-mail é opcional para participantes; sem convite aceito não há acesso compartilhado. O administrador pode alterar o e-mail ou cancelar um convite pendente. Vínculos aceitos são imutáveis nesta versão.

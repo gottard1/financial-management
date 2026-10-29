@@ -119,11 +119,15 @@ export function GroupSharingPanel({ data, notify }) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [section, setSection] = useState('manage');
   const [verified, setVerified] = useState(Boolean(user?.emailVerified));
   const ownedRef = useRef(owned);
   ownedRef.current = owned;
   const previousData = useRef(data);
+  const inviteForm = useRef();
   const group = data.groups.find((item) => item.id === groupId);
+  const pendingReceived = received.filter((item) => item.status === 'pending');
+  const pendingSent = sent.filter((item) => item.status === 'pending');
   const fail = () =>
     setError(
       'Não foi possível acessar o compartilhamento. Confira a conexão e a ativação do Firestore e das regras de acesso.',
@@ -223,22 +227,53 @@ export function GroupSharingPanel({ data, notify }) {
       </section>
     );
   return (
-    <section className="panel">
-      <h2>Convites e acesso ao grupo</h2>
-      <p>
-        Adicione o e-mail de uma pessoa já cadastrada. Quando ela entrar com esse e-mail confirmado
-        e aceitar, terá acesso ao histórico do participante, sem duplicar o cadastro.
-      </p>
-      <p className="hint">
-        Os convites aparecem dentro do aplicativo. Compartilhe o endereço do site com a pessoa.
-        Rendas pessoais, despesas individuais e comprovantes não são enviados.
-      </p>
+    <section className="sharing-panel" aria-labelledby="sharing-title">
+      <header className="panel sharing-header">
+        <p className="eyebrow">PARTICIPAÇÃO E ACESSO</p>
+        <h2 id="sharing-title">Convites e acesso ao grupo</h2>
+        <p className="muted">
+          Adicione o e-mail de uma pessoa já cadastrada. Quando ela entrar com esse e-mail
+          confirmado e aceitar, terá acesso ao histórico do participante, sem duplicar o cadastro.
+        </p>
+        <p className="hint">
+          Os convites aparecem dentro do aplicativo. Compartilhe o endereço do site com a pessoa.
+        </p>
+        <nav className="sharing-navigation" aria-label="Seções de convites e acesso">
+          <button
+            type="button"
+            className={section === 'manage' ? 'selected' : ''}
+            aria-pressed={section === 'manage'}
+            onClick={() => setSection('manage')}
+          >
+            <span>Convidar e gerenciar</span>
+            <span className="pill">{pendingSent.length}</span>
+          </button>
+          <button
+            type="button"
+            className={section === 'received' ? 'selected' : ''}
+            aria-pressed={section === 'received'}
+            onClick={() => setSection('received')}
+          >
+            <span>Convites recebidos</span>
+            <span className="pill">{pendingReceived.length}</span>
+          </button>
+          <button
+            type="button"
+            className={section === 'groups' ? 'selected' : ''}
+            aria-pressed={section === 'groups'}
+            onClick={() => setSection('groups')}
+          >
+            <span>Grupos compartilhados</span>
+            <span className="pill">{memberships.length}</span>
+          </button>
+        </nav>
+      </header>
       {error && (
         <p className="notice error" role="alert">
           {error}
         </p>
       )}
-      {!verified && (
+      {section === 'received' && !verified && (
         <div className="notice">
           <p>Confirme seu e-mail para consultar e aceitar convites recebidos.</p>
           <button
@@ -270,142 +305,235 @@ export function GroupSharingPanel({ data, notify }) {
           </button>
         </div>
       )}
-      <form onSubmit={invite}>
-        <label className="field">
-          Grupo que você administra
-          <select
-            required
-            value={groupId}
-            onChange={(event) => {
-              setGroupId(event.target.value);
-              setPersonId('');
-              setEmail('');
-            }}
-          >
-            <option value="">Selecione um grupo</option>
-            {data.groups.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
+      <section
+        className="panel"
+        hidden={section !== 'manage'}
+        aria-labelledby="invite-create-title"
+      >
+        <div className="sharing-section-heading">
+          <div>
+            <p className="eyebrow">ADMINISTRADOR</p>
+            <h3 id="invite-create-title">Convidar um participante</h3>
+          </div>
+        </div>
+        <p className="muted">
+          Escolha uma pessoa que já participa do grupo e vincule o e-mail dela.
+        </p>
+        {!data.groups.length && (
+          <p className="notice">
+            Cadastre as pessoas e crie um grupo abaixo para começar a convidar.
+          </p>
+        )}
+        <form ref={inviteForm} onSubmit={invite} className="sharing-invite-form">
+          <label className="field">
+            Grupo que você administra
+            <select
+              required
+              disabled={!data.groups.length}
+              value={groupId}
+              onChange={(event) => {
+                setGroupId(event.target.value);
+                setPersonId('');
+                setEmail('');
+              }}
+            >
+              <option value="">Selecione um grupo</option>
+              {data.groups.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Participante existente
+            <select
+              required
+              disabled={!group}
+              value={personId}
+              onChange={(event) => {
+                setPersonId(event.target.value);
+                setEmail('');
+              }}
+            >
+              <option value="">Selecione uma pessoa</option>
+              {(group?.memberIds || []).map((id) => (
+                <option key={id} value={id}>
+                  {data.people.find((person) => person.id === id)?.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            E-mail para vincular{' '}
+            <input
+              required
+              type="email"
+              maxLength={254}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <div className="form-actions">
+            <button className="button primary" disabled={busy || !group || !personId}>
+              {busy ? 'Salvando…' : 'Salvar convite'}
+            </button>
+          </div>
+        </form>
+      </section>
+      <section className="panel" hidden={section !== 'manage'} aria-labelledby="invite-sent-title">
+        <div className="sharing-section-heading">
+          <div>
+            <p className="eyebrow">ACOMPANHAMENTO</p>
+            <h3 id="invite-sent-title">Convites enviados</h3>
+          </div>
+          <span className="pill">{sent.length}</span>
+        </div>
+        <p className="muted">
+          {pendingSent.length} pendente(s) · {sent.length - pendingSent.length} conta(s)
+          vinculada(s)
+        </p>
+        {sent.length ? (
+          <ul className="sharing-record-list">
+            {sent.map((item) => (
+              <li key={item.id} className="sharing-record">
+                <div className="sharing-record-info">
+                  <strong>{item.personName}</strong>
+                  <span>{item.groupName}</span>
+                  <small>{item.email}</small>
+                </div>
+                <span className={'pill ' + (item.status === 'accepted' ? 'paid' : 'pending')}>
+                  {item.status === 'accepted' ? 'Conta vinculada' : 'Pendente'}
+                </span>
+                {item.status === 'pending' && (
+                  <div className="actions sharing-record-actions">
+                    <button
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        const localId = data.groups.find(
+                          (candidate) => sharedGroupId(user.uid, candidate.id) === item.groupId,
+                        )?.id;
+                        setGroupId(localId || '');
+                        setPersonId(item.personId);
+                        setEmail(item.email);
+                        inviteForm.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                    >
+                      Editar e-mail
+                    </button>{' '}
+                    <button
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => run(() => cancelGroupInvite(item.id))}
+                    >
+                      Cancelar convite
+                    </button>
+                  </div>
+                )}
+              </li>
             ))}
-          </select>
-        </label>
-        <label className="field">
-          Participante existente
-          <select
-            required
-            value={personId}
-            onChange={(event) => {
-              setPersonId(event.target.value);
-              setEmail('');
-            }}
-          >
-            <option value="">Selecione uma pessoa</option>
-            {(group?.memberIds || []).map((id) => (
-              <option key={id} value={id}>
-                {data.people.find((person) => person.id === id)?.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          E-mail para vincular{' '}
-          <input
-            required
-            type="email"
-            maxLength={254}
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </label>
-        <button className="button primary" disabled={busy || !group}>
-          Salvar convite
-        </button>
-      </form>
-      <h3>Convites que você administra</h3>
-      {sent.length ? (
-        <ul>
-          {sent.map((item) => (
-            <li key={item.id}>
-              {item.personName} · {item.groupName} · {item.email} ·{' '}
-              {item.status === 'accepted' ? 'Conta vinculada' : 'Pendente'}{' '}
-              {item.status === 'pending' && (
-                <>
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => {
-                      const localId = data.groups.find(
-                        (candidate) => sharedGroupId(user.uid, candidate.id) === item.groupId,
-                      )?.id;
-                      setGroupId(localId || '');
-                      setPersonId(item.personId);
-                      setEmail(item.email);
-                    }}
-                  >
-                    Editar e-mail
-                  </button>{' '}
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => run(() => cancelGroupInvite(item.id))}
-                  >
-                    Cancelar convite
-                  </button>
-                </>
-              )}
+          </ul>
+        ) : (
+          <div className="empty">
+            <strong>Nenhum convite enviado</strong>
+            <p>Use o formulário acima para dar acesso a um participante.</p>
+          </div>
+        )}
+        {owned.length > 0 && (
+          <div className="sharing-sync">
+            <p className="hint">
+              Alterações são compartilhadas enquanto o aplicativo está aberto. Use este botão para
+              tentar novamente se ocorrer uma falha.
+            </p>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  for (const item of owned) {
+                    if (data.groups.some((candidate) => candidate.id === item.snapshot.id))
+                      await publishGroup(data, item.snapshot.id, item.revision);
+                  }
+                  notify?.('Dados compartilhados atualizados.');
+                })
+              }
+            >
+              Atualizar dados compartilhados
+            </button>
+          </div>
+        )}
+      </section>
+      <section
+        className="panel"
+        hidden={section !== 'received'}
+        aria-labelledby="invite-received-title"
+      >
+        <div className="sharing-section-heading">
+          <div>
+            <p className="eyebrow">SEU ACESSO</p>
+            <h3 id="invite-received-title">Convites recebidos</h3>
+          </div>
+          <span className="pill">{pendingReceived.length}</span>
+        </div>
+        <p className="muted">
+          Convites para {user.email}. Aceitar mantém o histórico da pessoa que já está no grupo.
+        </p>
+        <ul className="sharing-record-list">
+          {pendingReceived.map((item) => (
+            <li key={item.id} className="sharing-record">
+              <div className="sharing-record-info">
+                <strong>{item.groupName}</strong>
+                <span>Participante: {item.personName}</span>
+              </div>
+              <button
+                className="button primary"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await acceptGroupInvite(item.id);
+                    setSection('groups');
+                    notify?.('Convite aceito. Seu grupo compartilhado já está disponível.');
+                  })
+                }
+              >
+                Aceitar convite
+              </button>
             </li>
           ))}
         </ul>
-      ) : (
-        <p>Nenhum convite criado.</p>
-      )}
-      {owned.length > 0 && (
-        <>
-          <p className="hint">
-            Alterações são compartilhadas enquanto o aplicativo está aberto. Use este botão para
-            tentar novamente se ocorrer uma falha.
-          </p>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                for (const item of owned) {
-                  if (data.groups.some((candidate) => candidate.id === item.snapshot.id))
-                    await publishGroup(data, item.snapshot.id, item.revision);
-                }
-                notify?.('Dados compartilhados atualizados.');
-              })
-            }
-          >
-            Atualizar dados compartilhados
-          </button>
-        </>
-      )}
-      <h3>Convites recebidos</h3>
-      {received
-        .filter((item) => item.status === 'pending')
-        .map((item) => (
-          <p key={item.id}>
-            {item.groupName} · Participante: {item.personName}{' '}
-            <button
-              className="button primary"
-              disabled={busy}
-              onClick={() => run(() => acceptGroupInvite(item.id))}
-            >
-              Aceitar convite
-            </button>
-          </p>
+        {verified && !pendingReceived.length && (
+          <div className="empty">
+            <strong>Nenhum convite pendente</strong>
+            <p>Quando alguém convidar seu e-mail, o convite aparecerá aqui.</p>
+          </div>
+        )}
+      </section>
+      <section
+        className="panel sharing-memberships"
+        hidden={section !== 'groups'}
+        aria-labelledby="shared-groups-title"
+      >
+        <div className="sharing-section-heading">
+          <div>
+            <p className="eyebrow">CONSULTA COMPARTILHADA</p>
+            <h3 id="shared-groups-title">Grupos compartilhados com você</h3>
+          </div>
+          <span className="pill">{memberships.length}</span>
+        </div>
+        <p className="muted">
+          Consulte suas despesas, saldos e repasses. Rendas e despesas pessoais permanecem privadas.
+        </p>
+        {memberships.map((membership) => (
+          <SharedGroupView key={membership.id} membership={membership} />
         ))}
-      {verified && !received.some((item) => item.status === 'pending') && (
-        <p>Nenhum convite pendente para seu e-mail.</p>
-      )}
-      <h3>Grupos compartilhados com você</h3>
-      {memberships.map((membership) => (
-        <SharedGroupView key={membership.id} membership={membership} />
-      ))}
-      {!memberships.length && <p>Seus grupos aparecerão aqui depois de aceitar um convite.</p>}
+        {!memberships.length && (
+          <div className="empty">
+            <strong>Você ainda não aceitou um convite</strong>
+            <p>Os grupos aos quais você ganhou acesso aparecerão nesta seção.</p>
+          </div>
+        )}
+      </section>
     </section>
   );
 }

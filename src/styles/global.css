@@ -3016,6 +3016,180 @@ dialog {
   }
 }
 
+.sharing-panel {
+  margin-bottom: 28px;
+}
+.sharing-header > .muted {
+  max-width: 760px;
+  line-height: 1.7;
+}
+.sharing-navigation {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+.sharing-navigation button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--forest);
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.sharing-navigation button.selected {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+.sharing-navigation button.selected .pill {
+  background: var(--lime);
+  color: var(--forest);
+}
+.sharing-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.sharing-section-heading h3 {
+  margin: 0;
+}
+.sharing-invite-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+.sharing-invite-form .field {
+  margin: 0;
+  min-width: 0;
+}
+.sharing-invite-form .form-actions {
+  margin: 0;
+  align-self: end;
+  justify-content: flex-end;
+}
+.sharing-record-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 22px 0 0;
+  list-style: none;
+}
+.sharing-record {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+.sharing-record-info {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 180px;
+  overflow-wrap: anywhere;
+}
+.sharing-record-info span,
+.sharing-record-info small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.sharing-record-actions {
+  flex-wrap: wrap;
+}
+.sharing-sync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.sharing-sync .hint {
+  flex: 1 1 280px;
+  margin: 0;
+}
+.sharing-memberships > .panel {
+  margin-top: 20px;
+  background: var(--paper);
+  box-shadow: none;
+}
+.sharing-panel [hidden] {
+  display: none !important;
+}
+.recurring-options {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.recurring-review-list {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0;
+}
+.recurring-review-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+  gap: 20px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.recurring-review-item .field {
+  margin: 0;
+  min-width: 0;
+}
+.recurring-review-item .hint {
+  margin: 10px 0 0;
+}
+@media (max-width: 760px) {
+  .sharing-navigation,
+  .sharing-invite-form,
+  .recurring-review-item {
+    grid-template-columns: 1fr;
+  }
+  .sharing-navigation {
+    gap: 8px;
+  }
+  .sharing-navigation button {
+    padding: 13px 14px;
+  }
+  .sharing-invite-form .form-actions .button {
+    width: 100%;
+  }
+  .sharing-record {
+    padding: 16px;
+    gap: 12px;
+  }
+  .sharing-record-actions {
+    width: 100%;
+  }
+  .sharing-record-actions .button {
+    flex: 1;
+  }
+  .recurring-review-item {
+    gap: 14px;
+    padding: 14px;
+  }
+}
+
 /* Account and group workflows keep their context without adding a cramped mobile tab. */
 .account-bar {
   display: flex;

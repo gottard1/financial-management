@@ -343,6 +343,11 @@ export function migrateData(input) {
     } else Object.values(percentages).forEach(percent);
     if (expense.fixed !== undefined && typeof expense.fixed !== 'boolean')
       throw new Error('Recorrência da despesa inválida.');
+    if (
+      expense.fixedAmountType !== undefined &&
+      !['fixed', 'variable'].includes(expense.fixedAmountType)
+    )
+      throw new Error('Tipo de valor recorrente inválido.');
     return {
       ...expense,
       category,

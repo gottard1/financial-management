@@ -78,7 +78,7 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 - Saldos individuais e sugestões de transferências entre devedores e credores, considerando somente despesas pagas.
 - O pagador pode ser um integrante que não participa da divisão; nesse caso, recebe o reembolso correspondente.
 - Novos integrantes não entram automaticamente em despesas antigas, pois cada conta mantém sua própria lista de participantes.
-- Cópia de contas fixas do mês anterior, como pendentes, evitando duplicar a mesma origem.
+- Contas recorrentes com valor fixo ou variável. Ao trazer o mês anterior, revise os valores e selecione quais contas copiar; as variáveis exigem o valor atual antes de salvar. As cópias ficam pendentes, sem duplicar a mesma origem ou alterar meses anteriores.
 
 ### Renda e estimativa do líquido
 
@@ -231,7 +231,7 @@ Escopos usam `person:<id>` e `group:<id>`. Uma conta em grupo nunca é duplicada
 
 ## Limitações atuais
 
-Uma despesa tem um pagador para seu valor total. Repasses confirmados abatem o saldo; o dinheiro não é movimentado pelo aplicativo. Não há recorrência automática de contas fixas; a cópia é explícita. Metas não calculam rendimentos ou retiradas. O aplicativo não acessa bancos nem realiza transações. As estimativas tributárias servem para orçamento e não substituem conferência da folha ou apuração fiscal.
+Uma despesa tem um pagador para seu valor total. Repasses confirmados abatem o saldo; o dinheiro não é movimentado pelo aplicativo. A inclusão de contas recorrentes é explícita e permite revisar o valor de cada mês antes de salvar. Metas não calculam rendimentos ou retiradas. O aplicativo não acessa bancos nem realiza transações. As estimativas tributárias servem para orçamento e não substituem conferência da folha ou apuração fiscal.
 
 O projeto permanece privado, sem licença de distribuição definida. Uma licença pode ser adicionada quando a forma de disponibilização for decidida.
 

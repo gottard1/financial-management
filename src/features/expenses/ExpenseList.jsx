@@ -110,7 +110,7 @@ export function ExpenseList({
         </div>
         <div className="actions">
           <button type="button" className="button secondary" onClick={copyFixed}>
-            Copiar fixas do mês anterior
+            Trazer recorrentes do mês anterior
           </button>
           <button type="button" className="button primary" onClick={newExpense}>
             + Nova despesa
@@ -175,7 +175,11 @@ export function ExpenseList({
                       <br />
                       <small>
                         {item.date} · {item.expense.category}
-                        {item.expense.fixed ? ' · Fixa' : ''}
+                        {item.expense.fixed
+                          ? item.expense.fixedAmountType === 'variable'
+                            ? ' · Recorrente variável'
+                            : ' · Recorrente fixa'
+                          : ''}
                       </small>
                     </td>
                     <td>{money(item.expense.amount)}</td>
@@ -210,7 +214,11 @@ export function ExpenseList({
                 <div className="expense-mobile-meta">
                   <span>
                     Vence em {item.date} · {item.expense.category}
-                    {item.expense.fixed ? ' · Fixa' : ''}
+                    {item.expense.fixed
+                      ? item.expense.fixedAmountType === 'variable'
+                        ? ' · Recorrente variável'
+                        : ' · Recorrente fixa'
+                      : ''}
                   </span>
                   <ExpenseStatus status={item.expense.status} />
                 </div>

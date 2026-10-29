@@ -116,8 +116,28 @@ export function ExpenseDialog({
               checked={draft.fixed}
               onChange={(e) => update('fixed', e.target.checked)}
             />
-            Conta fixa · pode ser copiada para o próximo mês
+            Conta recorrente · se repete todos os meses
           </label>
+          {draft.fixed && (
+            <div className="recurring-options">
+              <label className="field">
+                Como o valor se repete?
+                <select
+                  value={draft.fixedAmountType || 'fixed'}
+                  onChange={(event) => update('fixedAmountType', event.target.value)}
+                >
+                  <option value="fixed">Valor fixo · aluguel, assinatura</option>
+                  <option value="variable">Valor variável · luz, água, cartão</option>
+                </select>
+              </label>
+              <p className="hint">
+                {draft.fixedAmountType === 'variable'
+                  ? 'Ao copiar para outro mês, você informa o novo valor antes de salvar.'
+                  : 'Ao copiar para outro mês, o valor vem preenchido e pode ser ajustado.'}{' '}
+                Alterar um mês não muda os anteriores.
+              </p>
+            </div>
+          )}
         </fieldset>
         {shared && (
           <fieldset className="form-section expense-form-section">
