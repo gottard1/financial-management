@@ -45,6 +45,21 @@ Sem essas variáveis, a produção exibe a tela de configuração pendente e nã
 
 O workflow GitHub valida código e build. O envio à Vercel depende da integração do repositório configurada pelo proprietário. Um push bem-sucedido não confirma, sozinho, que um deploy terminou.
 
+## Domínio de autenticação na Vercel
+
+O arquivo `vercel.json` encaminha `/__/auth/*` e `/__/firebase/*` ao projeto `financial-management-262fb` com rewrites transparentes, sem redirecionar o navegador para outro domínio. Essas rotas precisam estar publicadas antes de alterar a variável de autenticação.
+
+Para usar `contas-planos.vercel.app` em produção:
+
+1. No Firebase Authentication, mantenha `contas-planos.vercel.app` nos domínios autorizados.
+2. No Google Cloud, abra o cliente OAuth Web usado pelo provedor Google do Firebase. Adicione a origem `https://contas-planos.vercel.app` e o URI de retorno exato `https://contas-planos.vercel.app/__/auth/handler`, preservando os anteriores.
+3. Na Vercel, configure `VITE_FIREBASE_AUTH_DOMAIN=contas-planos.vercel.app` apenas em Production. Se a variável atual também vale para Preview, separe os ambientes: Preview continua com `financial-management-262fb.firebaseapp.com`.
+4. Gere um novo deploy de produção após salvar a variável. O ambiente local continua usando o domínio padrão do Firebase em `.env.local`.
+
+O domínio personalizado de autenticação não altera automaticamente a marca exibida pelo Google. Nome e logotipo são configurados separadamente em Google Auth Platform → Branding.
+
+[Proxy oficial de autenticação Firebase](https://firebase.google.com/docs/auth/web/redirect-best-practices#option_3_proxy_auth_requests_to_firebaseappcom) · [Rewrites Vercel](https://vercel.com/docs/routing/rewrites).
+
 ## Dados e comprovantes
 
 - Contas autenticadas usam chaves de navegador prefixadas pelo UID.
