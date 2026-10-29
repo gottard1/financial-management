@@ -16,9 +16,11 @@ A estrutura usa JavaScript ES Modules e JSX. Não há TypeScript nesta versão. 
 
 ### Persistência por adaptador
 
-`localFinanceRepository` é a fronteira com `localStorage`. O hook `useFinanceData` traduz essa fronteira para o ciclo de vida React. A camada de domínio valida a estrutura salva, migra v1 para v2 e recusa dados inválidos; não apaga o original.
+`localFinanceRepository` é a fronteira com `localStorage`. O hook `useFinanceData` coordena a cópia local e a sincronização privada no ciclo de vida React. A camada de domínio valida a estrutura salva, migra v1/v2 para v3 e recusa dados inválidos; não apaga o original.
 
-O estado local ainda é um documento inteiro. Isso atende ao protótipo em um navegador; não é a estratégia de escrita concorrente para duas pessoas. Firebase deve usar entidades e operações por registro.
+O estado local continua sendo um documento inteiro para backup e compatibilidade. `financeCloudCodec` transforma esse estado em registros individuais por pessoa, despesa, grupo, plano, meta, aporte, repasse e competência de renda. `financeCloudStore` grava apenas registros alterados, removendo os excluídos, e atualiza uma revisão global da conta na mesma transação. Assim, uma gravação antiga não sobrescreve silenciosamente alterações de outra sessão. A ordenação das listas é preservada no documento de revisão, sem regravar todas as despesas ao excluir uma delas.
+
+`financeSync` mantém marcadores locais de envio pendente, serializa gravações e preserva alterações feitas durante um envio. A nuvem só é carregada depois de uma leitura confirmada pelo servidor. Uma conta ainda vazia recebe a cópia local da mesma conta; versões divergentes com alterações não enviadas exigem exportação e resolução explícita. A troca pela versão remota arquiva a versão local antes de substituir a cópia ativa. A gravação individual de comprovantes continua em IndexedDB.
 
 ### Tabelas tributárias versionadas
 
@@ -44,7 +46,7 @@ O rateio usa o método dos maiores restos para conservar centavos. Percentuais p
 
 O formato atual é v3, salvo em `financial-management-v3`. O adaptador migra v1/v2, convertendo escopos, pagadores, participantes, rendas, planos, metas e aportes. Os registros originais permanecem intactos nas antigas chaves. Nomenclaturas antigas ficam restritas à migração e seus testes.
 
-## Caminho para Firebase
+## Integração Firebase e próximos passos
 
 1. Introduzir autenticação e um ID estável de usuário.
 2. Associar pessoas e grupos financeiros a contas autenticadas, distinguindo cadastro financeiro de usuário com acesso.
@@ -52,7 +54,7 @@ O formato atual é v3, salvo em `financial-management-v3`. O adaptador migra v1/
 4. Implementar adaptador Firestore sem importar SDK no domínio ou em componentes de apresentação.
 5. Gravar cada despesa, aporte e renda como entidade própria. Não sobrescrever o documento inteiro do grupo.
 6. Testar regras no Firebase Emulator Suite: acesso autorizado, usuário externo, alteração de associação e validação de registros.
-7. Migrar dados locais por ação explícita do usuário, com prévia e deduplicação por ID.
+7. Preservar os IDs ao migrar automaticamente os dados locais da mesma conta quando o servidor confirma ausência de dados remotos. Divergências exigem resolução explícita, com exportação e arquivo local antes de trocar de versão.
 8. Validar sincronização, escritas concorrentes, erros de rede e reconexão antes de publicar.
 
 Uma organização possível no Firestore:
@@ -68,7 +70,7 @@ workspaces/{workspaceId}
   contributions/{contributionId}
 ```
 
-Essa árvore é uma proposta para a futura integração, não um schema já conectado. A associação deve ser verificada pelas regras e nunca apenas pelo seletor da interface. Chaves de Admin SDK pertencem ao servidor e nunca ao bundle React. Os campos públicos de configuração do SDK cliente não substituem autorização por regras.
+Essa árvore continua sendo uma proposta de evolução para edição colaborativa por registro dentro dos grupos. O schema conectado hoje usa `users/{uid}/finance` para os registros privados, `sharedGroups` para a projeção de consulta e `groupInvites`/`groupMemberships` para o acesso. As regras verificam o UID na área privada e a associação nos grupos. Chaves de Admin SDK pertencem ao servidor e nunca ao bundle React. Os campos públicos de configuração do SDK cliente não substituem autorização por regras.
 
 ## Evolução das regras financeiras
 
@@ -105,7 +107,7 @@ Não há serviços de backend, autenticação simulada, contas bancárias conect
 
 `infrastructure/firebase/client.js` inicializa apenas Firebase Authentication quando as quatro variáveis Web obrigatórias existem. `AuthProvider` controla a sessão e traduz erros do SDK; `AuthScreen` não conhece o domínio financeiro. O ponto de entrada monta o provider e `App` só monta a área financeira após autenticação ou modo de desenvolvimento autorizado.
 
-A área financeira é remontada por UID. `namespacedStorage` isola contas e mantém o dataset local legado separado. Não se trata de autorização de dados compartilhados em servidor; a etapa Firestore ainda exige regras e associação entre usuários e grupos. A sessão não importa automaticamente os dados locais para uma conta.
+A área financeira é remontada por UID. `namespacedStorage` isola contas e mantém o dataset local legado separado. A autorização remota está em `firestore.rules`, com isolamento privado por UID e associação verificada para grupos. A sessão não importa os dados do modo local para uma conta; a migração automática abrange somente os registros locais já pertencentes à própria conta autenticada.
 
 A persistência do hook valida e salva sincronamente antes de publicar o novo estado React. Assim, falhas de quota ou validação podem ser tratadas pelo fluxo que grava um repasse e seu arquivo.
 

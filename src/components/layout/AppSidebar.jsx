@@ -2,19 +2,20 @@ import React from 'react';
 const NAVIGATION = [
   ['overview', '◫', 'Visão geral', 'Início'],
   ['expenses', '↔', 'Despesas', 'Gastos'],
+  ['comparison', '▥', 'Comparar meses', 'Meses'],
   ['budget', '▦', 'Orçamento', 'Plano'],
   ['savings', '◎', 'Metas e reservas', 'Metas'],
   ['people', '♧', 'Rendas e benefícios', 'Rendas'],
   ['groups', '♙', 'Pessoas e grupos', 'Grupos'],
 ];
-export function AppSidebar({ tab, onNavigate, onExport }) {
+export function AppSidebar({ tab, onNavigate, onExport, cloudEnabled = false }) {
   return (
     <aside className="sidebar">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true">
           ↗
         </span>
-        contas &amp; planos<span className="pill">LOCAL</span>
+        contas &amp; planos<span className="pill">{cloudEnabled ? 'CONTA' : 'LOCAL'}</span>
       </div>
       <button
         type="button"
@@ -53,9 +54,13 @@ export function AppSidebar({ tab, onNavigate, onExport }) {
           <strong>Seus próximos passos.</strong>
         </p>
         <small>
-          Dados apenas neste navegador.
+          {cloudEnabled
+            ? 'Dados financeiros privados na sua conta.'
+            : 'Dados apenas neste navegador.'}
           <br />
-          Sem sincronização entre dispositivos.
+          {cloudEnabled
+            ? 'Comprovantes permanecem locais.'
+            : 'Sem sincronização entre dispositivos.'}
         </small>
         <button type="button" className="button secondary" onClick={onExport}>
           ↓ Exportar backup

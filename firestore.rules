@@ -10,6 +10,34 @@ service cloud.firestore {
     }
     function owns(id) { return signedIn() && group(id).adminUid == request.auth.uid; }
     function membershipId(groupId) { return request.auth.uid + '_' + groupId; }
+    match /users/{uid}/finance/{recordId} {
+      function owner() { return signedIn() && request.auth.uid == uid; }
+      function stateAfter() {
+        return getAfter(/databases/$(database)/documents/users/$(uid)/finance/state).data;
+      }
+      function validState() {
+        let next = request.resource.data;
+        return next.keys().hasOnly(['schemaVersion', 'revision', 'recordCount', 'orders', 'updatedAt']) &&
+          next.schemaVersion == 2 && next.revision is int && next.recordCount is int && next.orders is map &&
+          next.recordCount >= 1 && next.recordCount <= 10000 && next.updatedAt == request.time;
+      }
+      function validRecord() {
+        let next = request.resource.data;
+        let state = stateAfter();
+        return recordId.matches('(people|groups|expenses|goals|contributions|settlements|income|plans):.*') &&
+          next.keys().hasOnly(['kind', 'key', 'payload', 'revision']) && next.key is string &&
+          next.kind in ['people', 'groups', 'expenses', 'goals', 'contributions', 'settlements', 'income', 'plans'] &&
+          next.payload is string && next.payload.size() <= 750000 && next.revision == state.revision;
+      }
+      allow read: if owner();
+      allow create: if owner() && ((recordId == 'state' && validState() && request.resource.data.revision == 1) ||
+        (recordId != 'state' && validRecord()));
+      allow update: if owner() && ((recordId == 'state' && validState() &&
+        request.resource.data.revision == resource.data.revision + 1) ||
+        (recordId != 'state' && validRecord() && request.resource.data.revision > resource.data.revision));
+      allow delete: if owner() && recordId != 'state' &&
+        stateAfter().revision > resource.data.revision;
+    }
     match /sharedGroups/{id} {
       allow get: if signedIn() && !exists(/databases/$(database)/documents/sharedGroups/$(id)) &&
         id.matches(request.auth.uid + '_.*');

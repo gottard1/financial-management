@@ -4,13 +4,45 @@
 
 A tela de acesso usa o SDK oficial do Firebase Authentication: e-mail/senha, criação de conta, recuperação de senha e Google. O código está pronto; a conexão real depende das configurações Web do projeto Firebase e dos provedores habilitados.
 
-Os dados pessoais e os arquivos de comprovantes continuam locais, separados por UID. O compartilhamento opcional usa Cloud Firestore para publicar apenas os dados do grupo e vincular contas a participantes existentes mediante convite e aceite. A opção de desenvolvimento conserva os dados locais anteriores sem importá-los automaticamente para uma conta.
+Os dados financeiros são sincronizados em uma área privada por UID no Cloud Firestore, com uma cópia local para alterações pendentes. Os arquivos de comprovantes continuam locais. O compartilhamento opcional publica apenas os dados do grupo e vincula contas a participantes existentes mediante convite e aceite. A opção de desenvolvimento conserva os dados locais anteriores sem importá-los automaticamente para uma conta.
+
+## Persistência financeira privada
+
+Antes de publicar esta versão:
+
+1. Mantenha o banco Firestore padrão no mesmo projeto do Authentication.
+2. Publique novamente **todo o arquivo `firestore.rules`**, incluindo o novo bloco `users/{uid}/finance/{recordId}`. As regras da versão anterior permitem apenas os grupos e não permitem o salvamento privado.
+3. Publique também `firestore.indexes.json`, que desativa a indexação do conteúdo serializado dos registros privados. Pelo CLI autenticado, use `npx firebase deploy --only firestore --project financial-management-262fb`. Pelo Console, publique as regras e adicione uma isenção de campo único para collection group `finance`, campo `payload`, desativando os índices ascendente, descendente e array.
+4. A sincronização privada fica ativa por padrão nas contas autenticadas. `VITE_FINANCE_CLOUD_ENABLED=false` permite desativá-la temporariamente; `true` ou ausência da variável ativa o recurso. Alterar a variável exige novo build/deploy. O modo local de desenvolvimento não sincroniza.
+5. Entre primeiro na conta pelo navegador que contém os registros existentes e aguarde **Dados financeiros salvos na nuvem**. Só depois teste o mesmo login em outro dispositivo.
+
+### Migração e recuperação
+
+- A cópia local da própria conta é enviada automaticamente apenas depois que o servidor confirma a ausência de registros remotos. Um cache vazio não é tratado como banco vazio.
+- Se já existe uma versão remota e o navegador não tem alterações pendentes, a nuvem é carregada. Se há dados divergentes ainda não enviados, a edição é bloqueada, a cópia local é preservada e o aplicativo pede resolução.
+- Para resolver, exporte a cópia local e carregue a nuvem pelo botão correspondente. O aplicativo também arquiva os dados locais sob uma chave com prefixo `financial-management-conflict-` antes de substituir a cópia ativa. Não há mesclagem automática entre versões.
+- Alterações ficam primeiro salvas no navegador com um marcador de envio pendente. São agrupadas por 600 ms e gravadas em uma transação que exige a revisão remota esperada. Novas alterações feitas durante um envio são enfileiradas para o envio seguinte.
+- Se a conexão ou as regras impedirem o envio, o status informa a falha e mantém os registros locais. Use **Tentar sincronizar** ao restabelecer a conexão. Não limpe o navegador enquanto houver envio pendente.
+
+### Armazenamento e privacidade
+
+O caminho privado `users/{uid}/finance` contém um documento `state` com a revisão e a ordem dos registros. Cada pessoa, grupo, despesa, orçamento, meta, aporte e repasse tem seu próprio documento, identificado pelo tipo e pelo ID original. Cada competência de renda tem um documento com valores e benefícios das pessoas daquele mês. O formato v3 é reconstituído na leitura; não são criados IDs novos na migração. Só os registros alterados são gravados, junto da revisão, em uma transação atômica. Os dados são validados antes de carregar a interface.
+
+Cada documento contém um `payload` JSON validado, sem cortar caracteres Unicode, limitado a 750 KB. O aplicativo aceita até 10 mil registros e uma ordenação de até 500 KB; cada transação pode alterar ou remover até 450 registros. Uma primeira migração com mais de 450 registros exige migração assistida: o aplicativo recusa o envio e mantém a cópia local para exportação. O conteúdo `payload` não deve ser indexado. Uma alteração comum escreve somente os documentos modificados e o documento de revisão; a leitura inicial recupera os registros da conta e as leituras seguintes acompanham alterações.
+
+As regras não permitem que outro integrante de grupo consulte a área privada do titular. Grupos continuam usando uma projeção separada sem rendas ou despesas individuais. Metadados dos comprovantes acompanham os repasses privados, mas os arquivos continuam no IndexedDB e não aparecem em outro dispositivo.
+
+### Comparação mensal
+
+Abra **Comparar meses** no menu principal. O espaço Individual usa gastos pessoais mais a parte do participante nos grupos administrados nesse conjunto de dados; o espaço Grupo usa somente as despesas do grupo selecionado. O intervalo aceita de 1 a 24 meses e oferece atalhos de 6 e 12 meses terminando no mês de referência.
+
+O gráfico e as tabelas exibem renda em dinheiro, despesas pagas e pendentes, média e diferença entre os dois últimos meses do intervalo, além da distribuição por categoria. Os gastos seguem o vencimento, não a data do repasse; repasses não são somados novamente como despesas. Benefícios VA/VR não são somados à renda em dinheiro. Meses sem registros contam como zero. Meses com rateio proporcional sem renda suficiente são marcados para revisão e excluídos dos totais, sem inventar um gasto zero.
 
 ## Ativar convites e consulta compartilhada
 
 1. Crie o banco **Cloud Firestore padrão**, em modo de produção, no mesmo projeto usado pelo Authentication. Escolha a localização antes de criar o banco.
 2. Publique as regras do arquivo `firestore.rules`. Pelo Console, copie esse arquivo para a aba Regras do Firestore e publique. Com Firebase CLI autenticado, a alternativa é `npx firebase deploy --only firestore:rules --project financial-management-262fb`. Este comando não publica o site.
-3. Configure `VITE_GROUP_SHARING_ENABLED=true` no ambiente desejado da Vercel e gere um novo deploy. Localmente, adicione a variável a `.env.local` e reinicie o Vite. Sem a variável, os dados locais e o login continuam funcionando sem consultar o Firestore.
+3. Configure `VITE_GROUP_SHARING_ENABLED=true` no ambiente desejado da Vercel e gere um novo deploy. Localmente, adicione a variável a `.env.local` e reinicie o Vite. Sem essa variável, apenas os convites e a consulta compartilhada ficam desativados; a sincronização financeira privada continua ativa por padrão.
 4. Em **Pessoas e grupos**, cadastre os nomes e o grupo. Em **Convites e acesso ao grupo**, escolha o grupo e o participante existente e informe o e-mail. Quem publica o grupo é seu administrador no Firestore; somente essa conta pode atualizar dados e gerenciar convites.
 5. Compartilhe o endereço do site com o convidado. O sistema **não envia e-mail de convite**: os convites ficam disponíveis dentro do aplicativo, inclusive para contas criadas posteriormente. A confirmação de e-mail é enviada pelo Firebase quando a pessoa clica em **Enviar confirmação**.
 6. O convidado entra com o e-mail informado, confirma o endereço, clica em **Já confirmei meu e-mail** e aceita o convite. Google normalmente já fornece e-mail verificado. O aceite preserva o ID do participante e todo seu histórico no grupo.
@@ -23,7 +55,7 @@ A área de acesso está separada em **Convidar e gerenciar** (formulário, convi
 - O participante consulta despesas, sua parte, saldo após repasses e histórico de repasses por competência. Os lançamentos são gerenciados pelo administrador. Os grupos recebidos aparecem em **Pessoas e grupos**, separados dos espaços locais.
 - O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas do grupo com rateio calculado e repasses. Não recebe rendas, perfis de renda, despesas individuais, e-mails dos demais convidados, notas ou arquivos/metadados de comprovantes.
 - As alterações do administrador são publicadas com atraso de 700 ms enquanto o aplicativo está aberto. Falhas geram aviso e podem ser retomadas com **Atualizar dados compartilhados**. O primeiro convite também publica o histórico existente.
-- O estado completo do administrador ainda depende do navegador original e do backup JSON. A projeção compartilhada não substitui um backup e não é importada automaticamente em outro dispositivo. Revisões transacionais evitam sobrescrever uma publicação concorrente sem aviso.
+- O estado completo do administrador é sincronizado pela área privada da própria conta. A projeção compartilhada permanece separada e não expõe esse estado aos convidados. Revisões transacionais evitam sobrescrever uma publicação concorrente sem aviso.
 - Aceite e associação são gravados atomicamente. As regras exigem e-mail verificado, convite pendente para aquele endereço e correspondência entre grupo, participante e UID.
 - O snapshot é um documento Firestore, sujeito ao limite de tamanho por documento. Não há upload de arquivos nesta etapa.
 
@@ -92,4 +124,4 @@ O domínio personalizado de autenticação não altera automaticamente a marca e
 - Comprovantes usam um banco IndexedDB separado por UID/modo local.
 - O JSON exportado contém registros e metadados dos comprovantes, mas não os arquivos.
 - Não há upload de recibos para Firebase Storage nesta etapa.
-- A consulta compartilhada dos grupos usa Firestore quando ativada conforme as instruções acima. A sincronização do espaço pessoal e dos arquivos de comprovantes ainda não está implementada.
+- Os dados financeiros privados e a consulta compartilhada usam áreas separadas no Firestore. Os arquivos de comprovantes ainda não são sincronizados.

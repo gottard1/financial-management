@@ -3,6 +3,7 @@ import { sendEmailVerification } from 'firebase/auth';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { normalizeInviteEmail, projectSharedGroup } from '../../domain/groups/groupSharing.js';
+import { stableJson } from '../../domain/budget/financeCloudCodec.js';
 import {
   acceptGroupInvite,
   cancelGroupInvite,
@@ -108,7 +109,7 @@ function SharedGroupView({ membership }) {
   );
 }
 
-export function GroupSharingPanel({ data, notify }) {
+export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
   const { user, localMode } = useAuth();
   const [owned, setOwned] = useState([]);
   const [sent, setSent] = useState([]);
@@ -150,14 +151,13 @@ export function GroupSharingPanel({ data, notify }) {
   useEffect(() => {
     if (previousData.current === data) return undefined;
     previousData.current = data;
-    if (!sharingEnabled || !user || localMode) return undefined;
+    if (!sharingEnabled || !user || localMode || syncBlocked) return undefined;
     const timer = setTimeout(async () => {
       try {
         for (const shared of ownedRef.current) {
           if (
             data.groups.some((item) => item.id === shared.snapshot.id) &&
-            JSON.stringify(projectSharedGroup(data, shared.snapshot.id)) !==
-              JSON.stringify(shared.snapshot)
+            stableJson(projectSharedGroup(data, shared.snapshot.id)) !== stableJson(shared.snapshot)
           )
             await publishGroup(data, shared.snapshot.id, shared.revision);
         }
@@ -169,7 +169,7 @@ export function GroupSharingPanel({ data, notify }) {
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [data, user?.uid, localMode]);
+  }, [data, user?.uid, localMode, syncBlocked]);
 
   async function run(operation) {
     setBusy(true);

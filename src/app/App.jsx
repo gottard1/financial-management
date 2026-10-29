@@ -19,6 +19,8 @@ import { BudgetPanel } from '../features/budget/BudgetPanel.jsx';
 import { SavingsPanel } from '../features/savings/SavingsPanel.jsx';
 import { GroupsPanel } from '../features/groups/GroupsPanel.jsx';
 import { SettlementsPanel } from '../features/settlements/SettlementsPanel.jsx';
+import { MonthlyComparisonPanel } from '../features/comparison/MonthlyComparisonPanel.jsx';
+import { FinanceSyncStatus } from '../features/sync/FinanceSyncStatus.jsx';
 import { AuthScreen } from '../features/auth/AuthScreen.jsx';
 import { useAuth } from '../features/auth/AuthProvider.jsx';
 const monthNow = () => new Date().toLocaleDateString('sv-SE').slice(0, 7);
@@ -48,11 +50,16 @@ function FinanceApp({ storageNamespace }) {
     error: storageError,
     blocked,
     exportJson,
+    cloudEnabled,
+    syncStatus,
+    syncError,
+    retrySync,
+    useCloudVersion,
   } = useFinanceData(storageNamespace);
   const [month, setMonth] = useState(monthNow),
     [tab, setTab] = useState('overview'),
     [mode, setMode] = useState('individual'),
-    [person, setPerson] = useState(() => data.people[0].id),
+    [personId, setPerson] = useState(() => data.people[0].id),
     [groupId, setGroupId] = useState(() => data.groups[0]?.id || ''),
     [draft, setDraft] = useState(null),
     [error, setError] = useState(''),
@@ -61,6 +68,7 @@ function FinanceApp({ storageNamespace }) {
   const dialog = useRef();
   const [recurringDraft, setRecurringDraft] = useState(null);
   const group = data.groups.find((item) => item.id === groupId) || data.groups[0];
+  const person = data.people.some((item) => item.id === personId) ? personId : data.people[0].id;
   const selectedGroupId = group?.id || '';
   const scope = mode === 'group' ? (group ? 'group:' + group.id : '') : 'person:' + person;
   const memberIds = mode === 'group' ? group?.memberIds || [] : [person];
@@ -85,6 +93,9 @@ function FinanceApp({ storageNamespace }) {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [tab]);
+  useEffect(() => {
+    if (personId !== person) setPerson(person);
+  }, [personId, person]);
   function close() {
     setDraft(null);
     setError('');
@@ -197,9 +208,15 @@ function FinanceApp({ storageNamespace }) {
     setTab(id);
     setError('');
   };
+  if (syncStatus === 'loading')
+    return (
+      <main className="auth-loading" role="status">
+        Carregando seus dados financeiros da nuvem…
+      </main>
+    );
   return (
     <div className="app-shell">
-      <AppSidebar tab={tab} onNavigate={go} onExport={exportData} />
+      <AppSidebar tab={tab} onNavigate={go} onExport={exportData} cloudEnabled={cloudEnabled} />
       <main className="main-content">
         <header className="app-page-header">
           <div>
@@ -214,6 +231,7 @@ function FinanceApp({ storageNamespace }) {
                   people: 'Entenda quanto fica com você.',
                   groups: 'Pessoas, grupos e planos.',
                   settlements: 'Repasses, sem perder o histórico.',
+                  comparison: 'Cada mês conta uma história.',
                 }[tab]
               }
             </h1>
@@ -239,9 +257,9 @@ function FinanceApp({ storageNamespace }) {
         <div className="account-bar">
           <span>
             {localMode ? 'Modo local de desenvolvimento' : user?.email || 'Sessão autenticada'} ·
-            {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true'
-              ? 'Dados pessoais e comprovantes neste navegador. Consulte convites em Pessoas e grupos.'
-              : 'Dados e comprovantes neste navegador, sem sincronização.'}
+            {cloudEnabled
+              ? 'Conta com sincronização financeira privada.'
+              : 'Dados financeiros neste navegador.'}
           </span>
           <button
             className="button secondary"
@@ -250,156 +268,179 @@ function FinanceApp({ storageNamespace }) {
             {localMode ? 'Voltar ao login' : 'Sair'}
           </button>
         </div>
-        <WorkspaceSelector
-          {...{ mode, setMode, person, setPerson, setGroupId, tab }}
-          groupId={selectedGroupId}
-          people={data.people}
-          groups={data.groups}
-          onClearError={() => setError('')}
+        <FinanceSyncStatus
+          status={syncStatus}
+          error={syncError}
+          retry={retrySync}
+          exportLocal={exportData}
+          useCloud={() => {
+            try {
+              exportData();
+              useCloudVersion();
+              setError('');
+            } catch (err) {
+              setError(err.message);
+            }
+          }}
         />
-        {mode === 'group' && group && tab !== 'people' && tab !== 'groups' && (
-          <nav className="group-subnav" aria-label="Seções do grupo">
-            <button
-              className={'button ' + (tab === 'overview' ? 'primary' : 'secondary')}
-              onClick={() => go('overview')}
-            >
-              Visão do grupo
-            </button>
-            <button
-              className={'button ' + (tab === 'settlements' ? 'primary' : 'secondary')}
-              onClick={() => go('settlements')}
-            >
-              Repasses e comprovantes
-            </button>
-          </nav>
-        )}
-        {notice && (
-          <div className="notice" role="status">
-            <span>{notice}</span>
-            <button aria-label="Fechar aviso" onClick={() => setNotice('')}>
-              ×
-            </button>
-          </div>
-        )}
-        {(error || storageError) && !draft && (
-          <p role="alert" className="notice error">
-            {error || storageError}
-          </p>
-        )}
-        {blocked && (
-          <div className="notice error">
-            Persistência bloqueada para preservar o arquivo original. Exporte o backup antes de
-            continuar.
-          </div>
-        )}
-        <div hidden={tab !== 'groups'}>
-          {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true' ? (
-            <React.Suspense fallback={<p role="status">Carregando compartilhamento…</p>}>
-              <GroupSharingPanel data={data} notify={setNotice} />
-            </React.Suspense>
-          ) : (
-            <section className="panel">
-              <h2>Convites e acesso ao grupo</h2>
-              <p>
-                O compartilhamento aguarda ativação neste ambiente. Você já pode cadastrar
-                participantes pelo nome.
-              </p>
-            </section>
-          )}
-        </div>
-        {tab === 'people' ? (
-          <IncomePanel
-            key={month + '|' + person}
-            {...{ data, setData, month, person }}
-            notify={setNotice}
+        <div inert={blocked ? true : undefined}>
+          <WorkspaceSelector
+            {...{ mode, setMode, person, setPerson, setGroupId, tab }}
+            groupId={selectedGroupId}
+            people={data.people}
+            groups={data.groups}
+            onClearError={() => setError('')}
           />
-        ) : tab === 'groups' ? (
-          <GroupsPanel {...{ data, setData }} notify={setNotice} />
-        ) : mode === 'group' && !group ? (
-          <section className="panel empty">
-            <h2>Crie seu primeiro grupo</h2>
-            <p>
-              Reúna pessoas para organizar despesas de uma casa, viagem ou outro plano
-              compartilhado.
+          {mode === 'group' && group && tab !== 'people' && tab !== 'groups' && (
+            <nav className="group-subnav" aria-label="Seções do grupo">
+              <button
+                className={'button ' + (tab === 'overview' ? 'primary' : 'secondary')}
+                onClick={() => go('overview')}
+              >
+                Visão do grupo
+              </button>
+              <button
+                className={'button ' + (tab === 'settlements' ? 'primary' : 'secondary')}
+                onClick={() => go('settlements')}
+              >
+                Repasses e comprovantes
+              </button>
+            </nav>
+          )}
+          {notice && (
+            <div className="notice" role="status">
+              <span>{notice}</span>
+              <button aria-label="Fechar aviso" onClick={() => setNotice('')}>
+                ×
+              </button>
+            </div>
+          )}
+          {(error || storageError) && !draft && (
+            <p role="alert" className="notice error">
+              {error || storageError}
             </p>
-            <button className="button primary" onClick={() => go('groups')}>
-              Criar grupo
-            </button>
-          </section>
-        ) : (
-          <>
-            {statsError && (
-              <div className="notice error" role="alert">
-                <p>{statsError} Edite as rendas ou a forma de divisão das despesas.</p>
-              </div>
-            )}
-            {stats && tab === 'overview' && <MonthlySummary {...{ stats, mode, benefits }} />}
-            {tab === 'budget' && stats && (
-              <BudgetPanel
-                key={scope + month}
-                {...{ data, setData, scope, month, stats }}
-                notify={setNotice}
-              />
-            )}
-            {tab === 'savings' && stats && (
-              <SavingsPanel
-                key={scope + month}
-                {...{ data, setData, scope, month, stats }}
-                notify={setNotice}
-              />
-            )}
-            {tab === 'settlements' && stats && mode === 'group' && (
-              <SettlementsPanel
-                key={scope + month}
-                {...{ data, setData, scope, month, stats, storageNamespace }}
-                notify={setNotice}
-              />
-            )}
-            {tab === 'settlements' && mode !== 'group' && (
-              <section className="panel empty">
-                <h2>Selecione um grupo</h2>
-                <p>Os repasses registram devoluções entre integrantes de um grupo.</p>
-                <button className="button primary" onClick={() => setMode('group')}>
-                  Escolher grupo
-                </button>
+          )}
+          {blocked && (
+            <div className="notice error">
+              Edição bloqueada para preservar seus dados. Exporte o backup e resolva o aviso de
+              sincronização antes de continuar.
+            </div>
+          )}
+          <div hidden={tab !== 'groups'}>
+            {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true' ? (
+              <React.Suspense fallback={<p role="status">Carregando compartilhamento…</p>}>
+                <GroupSharingPanel data={data} notify={setNotice} syncBlocked={blocked} />
+              </React.Suspense>
+            ) : (
+              <section className="panel">
+                <h2>Convites e acesso ao grupo</h2>
+                <p>
+                  O compartilhamento aguarda ativação neste ambiente. Você já pode cadastrar
+                  participantes pelo nome.
+                </p>
               </section>
             )}
-            {tab === 'overview' && stats && (
-              <OverviewPanel {...{ stats, mode, plan, data, go, scope }} />
-            )}
-            {(tab === 'expenses' || tab === 'overview') && (
-              <ExpenseList
-                {...{
-                  mode,
-                  data,
-                  person,
-                  group,
-                  memberIds,
-                  expenses,
-                  copyFixed,
-                  newExpense,
-                  filter,
-                  setFilter,
-                  visible,
-                  incomes,
-                  edit,
-                  setData,
-                }}
-              />
-            )}
-          </>
-        )}
-        <footer className="muted">
-          Contas & Planos · Individual ou em grupo.{' '}
-          <span>
-            Versão local · valores em reais ·{' '}
-            <button className="text-button" onClick={exportData}>
-              Exportar backup
-            </button>
-          </span>
-        </footer>
+          </div>
+          {tab === 'people' ? (
+            <IncomePanel
+              key={month + '|' + person}
+              {...{ data, setData, month, person }}
+              notify={setNotice}
+            />
+          ) : tab === 'groups' ? (
+            <GroupsPanel {...{ data, setData }} notify={setNotice} />
+          ) : mode === 'group' && !group ? (
+            <section className="panel empty">
+              <h2>Crie seu primeiro grupo</h2>
+              <p>
+                Reúna pessoas para organizar despesas de uma casa, viagem ou outro plano
+                compartilhado.
+              </p>
+              <button className="button primary" onClick={() => go('groups')}>
+                Criar grupo
+              </button>
+            </section>
+          ) : (
+            <>
+              {statsError && (
+                <div className="notice error" role="alert">
+                  <p>{statsError} Edite as rendas ou a forma de divisão das despesas.</p>
+                </div>
+              )}
+              {stats && tab === 'overview' && <MonthlySummary {...{ stats, mode, benefits }} />}
+              {tab === 'comparison' && (
+                <MonthlyComparisonPanel
+                  key={scope + '|' + month}
+                  {...{ data, scope, month, mode }}
+                />
+              )}
+              {tab === 'budget' && stats && (
+                <BudgetPanel
+                  key={scope + month}
+                  {...{ data, setData, scope, month, stats }}
+                  notify={setNotice}
+                />
+              )}
+              {tab === 'savings' && stats && (
+                <SavingsPanel
+                  key={scope + month}
+                  {...{ data, setData, scope, month, stats }}
+                  notify={setNotice}
+                />
+              )}
+              {tab === 'settlements' && stats && mode === 'group' && (
+                <SettlementsPanel
+                  key={scope + month}
+                  {...{ data, setData, scope, month, stats, storageNamespace }}
+                  notify={setNotice}
+                />
+              )}
+              {tab === 'settlements' && mode !== 'group' && (
+                <section className="panel empty">
+                  <h2>Selecione um grupo</h2>
+                  <p>Os repasses registram devoluções entre integrantes de um grupo.</p>
+                  <button className="button primary" onClick={() => setMode('group')}>
+                    Escolher grupo
+                  </button>
+                </section>
+              )}
+              {tab === 'overview' && stats && (
+                <OverviewPanel {...{ stats, mode, plan, data, go, scope }} />
+              )}
+              {(tab === 'expenses' || tab === 'overview') && (
+                <ExpenseList
+                  {...{
+                    mode,
+                    data,
+                    person,
+                    group,
+                    memberIds,
+                    expenses,
+                    copyFixed,
+                    newExpense,
+                    filter,
+                    setFilter,
+                    visible,
+                    incomes,
+                    edit,
+                    setData,
+                  }}
+                />
+              )}
+            </>
+          )}
+          <footer className="muted">
+            Contas & Planos · Individual ou em grupo.{' '}
+            <span>
+              {cloudEnabled ? 'Sincronização por conta' : 'Versão local'} · valores em reais ·{' '}
+              <button className="text-button" onClick={exportData}>
+                Exportar backup
+              </button>
+            </span>
+          </footer>
+        </div>
       </main>
-      {recurringDraft && (
+      {recurringDraft && !blocked && (
         <RecurringExpensesDialog
           items={recurringDraft.items}
           month={recurringDraft.month}
@@ -407,7 +448,7 @@ function FinanceApp({ storageNamespace }) {
           onSave={saveRecurring}
         />
       )}
-      {draft && (
+      {draft && !blocked && (
         <ExpenseDialog
           {...{
             dialog,

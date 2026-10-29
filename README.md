@@ -2,7 +2,7 @@
 
 Controle financeiro pessoal e em grupos, feito em React, com quantidade variável de participantes. Organiza rendas, despesas, orçamento e dinheiro guardado em uma interface responsiva, com os cálculos visíveis antes de salvar.
 
-O nome do repositório é **financial-management**. Esta versão funciona inteiramente no navegador, com persistência local. A tela de login Firebase está implementada e aguarda configuração do projeto Web. A sincronização de dados fica para uma etapa posterior.
+O nome do repositório é **financial-management**. Contas autenticadas sincronizam os dados financeiros privados no Cloud Firestore e mantêm uma cópia local com alterações pendentes. O modo local de desenvolvimento funciona sem banco. Configure o Firebase e publique as regras antes de habilitar a versão de produção.
 
 ## Requisitos
 
@@ -54,6 +54,7 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 4. Use **Individual** para os gastos pessoais ou **Grupo** para escolher um espaço compartilhado.
 5. Ao lançar uma despesa, selecione quem participa, a forma de divisão e quem pagou.
 6. Confira os valores antes de salvar e os acertos na visão geral do grupo.
+7. Abra **Comparar meses** para ver a evolução dos gastos, totais pagos e pendentes e despesas por categoria em um período de até 24 meses.
 
 É possível usar apenas o modo individual, sem criar nenhum grupo. Uma pessoa pode participar de vários grupos e ser cadastrada apenas pelo nome. Com o compartilhamento Firestore ativado, o administrador pode associar um e-mail ao participante existente; após confirmar o endereço e aceitar o convite no aplicativo, a pessoa consulta os dados do grupo com sua própria conta, preservando o histórico. Veja a [ativação e os limites do compartilhamento](docs/firebase-setup.md#ativar-convites-e-consulta-compartilhada).
 
@@ -181,21 +182,23 @@ docs/                              # Arquitetura, evolução e fontes de cálcul
 
 Direção de dependência: **interface → hooks/domínio; armazenamento → domínio**. O domínio não importa React, navegador, Firebase ou componentes. Os componentes de interface reutilizam as mesmas funções testadas dos resumos.
 
-O repositório de armazenamento isola `localStorage`, migração e exportação. O hook controla o ciclo React; funcionalidades ficam em pastas por domínio de uso. Isso evita espalhar SDK de banco pelas telas e permite introduzir um adaptador Firebase depois.
+Os repositórios isolam `localStorage`, migração, exportação e Firestore. O coordenador de sincronização serializa gravações, retoma alterações pendentes e detecta conflitos por revisão. O hook controla o ciclo React; funcionalidades ficam em pastas por domínio de uso. O SDK de banco fica concentrado na infraestrutura.
 
 Leia [decisões e evolução da arquitetura](docs/architecture.md) antes de adicionar funcionalidades.
 
-## Dados e privacidade local
+## Dados, sincronização e privacidade
 
-- Login identifica a conta, mas não sincroniza dados. O modo local de desenvolvimento não autentica usuários.
-- Dados ficam em `localStorage`, chave `financial-management-v3`.
+- Contas autenticadas salvam rendas, benefícios, despesas, grupos, planos, metas, aportes e repasses na área privada `users/{uid}/finance` do Firestore. Somente o titular pode ler ou escrever essa área.
+- A cópia em `localStorage`, chave `financial-management-v3`, fica isolada por UID e permite preservar alterações enquanto o envio à nuvem está pendente. O modo local de desenvolvimento não autentica nem sincroniza.
+- A primeira conexão migra a cópia local da mesma conta quando o servidor confirma que não há dados na nuvem. Outro dispositivo carrega os dados já existentes; versões locais divergentes ficam protegidas para exportação e resolução explícita.
+- O status do aplicativo distingue carregamento, alterações pendentes, salvamento confirmado, falha e conflito. Uma alteração ainda pendente não deve ser considerada salva na nuvem.
 - Formatos antigos v1/v2 são migrados para pessoas e grupos por IDs, preservando as chaves originais sem sobrescrevê-las.
 - Pessoas, rendas, despesas, planos, metas e aportes passam a usar IDs estáveis, sem depender da posição em uma lista.
 - Dados inválidos são preservados e a persistência fica bloqueada para evitar sobrescrita.
 - Há exportação JSON. A importação de backup pela interface ainda não foi implementada.
-- Limpar dados do navegador pode apagar os registros. Exporte backups.
+- Limpar dados do navegador apaga comprovantes e alterações ainda não sincronizadas. Dados confirmados na nuvem são recuperados com o mesmo login. Exporte backups antes de limpar o navegador.
 - Host, protocolo, porta, navegador e perfil definem a origem. `localhost` e `127.0.0.1` não compartilham dados. Mover os arquivos do projeto não altera os registros se a URL continuar a mesma.
-- Sem sincronização, resolução de conflitos entre abas ou proteção criptográfica no armazenamento local.
+- Conflitos de revisão impedem sobrescrita silenciosa. O usuário pode exportar sua versão local e carregar a nuvem; a versão local também é arquivada no navegador antes dessa troca. Não há mesclagem ou importação de backups pela interface.
 
 Backups contêm informações financeiras. A pasta `backups/`, nomes de exportação e credenciais estão no `.gitignore`. Não versione dados pessoais nem chaves privadas.
 
@@ -215,11 +218,11 @@ Também confira no navegador: fluxos individuais e de grupo, cadastro e edição
 
 ## Próximas etapas
 
-- Firestore com associação ao espaço e regras testadas; concluir a configuração real do Firebase Authentication.
+- Sincronização de arquivos de comprovantes e restauração de backups pela interface.
 - Importação de backups e retiradas das reservas.
 - Pagamentos parciais, múltiplos pagadores e transferências entre espaços.
 - Fechamento de mês com snapshots para preservar divisões antigas.
-- Histórico visual e relatórios exportáveis.
+- Relatórios exportáveis a partir do histórico mensal.
 - Tabelas tributárias selecionadas por competência.
 - Publicação Vercel após concluir a versão local.
 
@@ -239,7 +242,7 @@ O projeto permanece privado, sem licença de distribuição definida. Uma licen�
 
 A tela de login Firebase está implementada com e-mail/senha, Google, cadastro e recuperação de acesso. Configure o aplicativo Web e os provedores seguindo [Firebase e Vercel](docs/firebase-setup.md). Sem configuração, o login fica pendente. O modo local sem autenticação está disponível somente em desenvolvimento; produção não oferece esse acesso.
 
-O SDK autentica a conta, mas dados e comprovantes permanecem locais por usuário. Eles ainda não são sincronizados por Firestore. Dados antigos do modo local são preservados e não são importados automaticamente para uma conta autenticada.
+O SDK autentica a conta e os dados financeiros usam Firestore com regras privadas por UID. Os arquivos de comprovantes permanecem locais. Dados antigos do modo local são preservados e não são importados automaticamente para uma conta autenticada. Consulte [ativação e migração](docs/firebase-setup.md#persistência-financeira-privada).
 
 ## Repasses recebidos
 

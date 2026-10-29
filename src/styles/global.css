@@ -2106,7 +2106,7 @@ dialog {
     left: 0;
     right: 0;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 3px;
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
     background: #fdfefbfa;
@@ -2931,7 +2931,7 @@ dialog {
 }
 @media (max-width: 760px) {
   .sidebar .app-navigation {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 2px;
     padding-left: 5px;
     padding-right: 5px;
@@ -3013,6 +3013,161 @@ dialog {
   }
   .group-transfers .amount {
     align-self: flex-end;
+  }
+}
+
+.finance-sync-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #eef4e5;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.finance-sync-status > div:first-child {
+  flex: 1 1 280px;
+}
+.finance-sync-status small {
+  display: block;
+  color: var(--muted);
+}
+.finance-sync-status p {
+  margin: 8px 0;
+}
+.finance-sync-status.offline,
+.finance-sync-status.conflict {
+  background: #fff5e9;
+  border-color: #e9d3b7;
+}
+.finance-sync-status .actions {
+  flex-wrap: wrap;
+}
+.comparison-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+}
+.comparison-filters .field {
+  margin: 0;
+  flex: 1 1 160px;
+}
+.comparison-filters .actions {
+  flex-wrap: wrap;
+}
+.comparison-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.comparison-metrics article {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+.comparison-metrics article > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.comparison-metrics strong {
+  font-family: Manrope, sans-serif;
+  font-size: clamp(1.2rem, 2.2vw, 1.8rem);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.comparison-metrics small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.comparison-chart {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding: 24px 4px 8px;
+}
+.comparison-chart-column {
+  display: flex;
+  flex: 1 0 82px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.comparison-chart-column > small {
+  font-variant-numeric: tabular-nums;
+}
+.comparison-chart-track {
+  height: 190px;
+  width: 100%;
+  max-width: 70px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--paper);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.comparison-chart-bar {
+  width: 100%;
+  background: var(--forest);
+  border-radius: 8px 8px 0 0;
+  min-height: 3px;
+}
+.comparison-chart-bar.invalid {
+  background: var(--orange);
+}
+.comparison-table-wrap {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.comparison-table th,
+.comparison-table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.comparison-table th:first-child {
+  text-align: left;
+}
+.comparison-table thead {
+  background: var(--paper);
+}
+.comparison-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+@media (max-width: 760px) {
+  .comparison-metrics {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .comparison-filters .actions {
+    width: 100%;
+  }
+  .comparison-filters .button {
+    flex: 1;
+    font-size: 0.74rem;
+  }
+  .finance-sync-status {
+    padding: 14px;
+  }
+  .finance-sync-status .actions,
+  .finance-sync-status .actions .button {
+    width: 100%;
   }
 }
 

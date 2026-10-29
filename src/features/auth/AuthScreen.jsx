@@ -311,8 +311,9 @@ export function AuthScreen() {
             </>
           )}
           <p className="auth-storage-note">
-            O login identifica sua conta. Nesta etapa, os dados financeiros continuam neste
-            navegador e ainda não são sincronizados entre dispositivos.
+            {import.meta.env.VITE_FINANCE_CLOUD_ENABLED === 'false'
+              ? 'A sincronização está desativada neste ambiente. Os dados permanecem neste navegador.'
+              : 'Sua conta mantém os dados financeiros privados na nuvem e uma cópia neste navegador. Arquivos de comprovantes permanecem locais.'}
           </p>
         </div>
       </section>

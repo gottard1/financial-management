@@ -1,6 +1,8 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createFinanceCloudStore } from '../../src/infrastructure/firebase/financeCloudStore.js';
+import { migrateData, defaultIncomeConfig } from '../../src/domain/budget/workspaceCalculations.js';
 import {
   initializeTestEnvironment,
   assertFails,
@@ -17,6 +19,7 @@ import {
   updateDoc,
   where,
   writeBatch,
+  deleteDoc,
 } from 'firebase/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
@@ -47,6 +50,118 @@ before(async () => {
 after(async () => {
   if (environment) await environment.cleanup();
 });
+
+test(
+  'private finance survives reload, isolates accounts and rejects stale writes atomically',
+  { skip: !enabled },
+  async () => {
+    const owner = context('private-owner');
+    const other = context('member');
+    const store = createFinanceCloudStore(owner, 'private-owner');
+    const data = migrateData(null);
+    data.months = { '2026-10': { 'person-0': 230000 } };
+    data.incomeConfigs = {
+      '2026-10': {
+        'person-0': {
+          ...defaultIncomeConfig(220000),
+          cashBonus: 10000,
+          foodAllowance: 60000,
+          mealAllowance: 30000,
+        },
+      },
+    };
+    data.people[0].notes = '🧾'.repeat(70000);
+    data.expenses = [
+      {
+        id: 'bill',
+        description: 'Luz',
+        amount: 18745,
+        date: '2026-10-20',
+        category: 'Moradia',
+        workspace: 'person:person-0',
+        payer: 'person-0',
+        participants: ['person-0'],
+        percentages: {},
+        split: 'equal',
+        status: 'pending',
+        fixed: true,
+        fixedAmountType: 'variable',
+      },
+    ];
+    await assertSucceeds(getDocs(collection(owner, 'users', 'private-owner', 'finance')));
+    assert.equal(await store.save(data, null), 1);
+    await assertFails(getDocs(collection(other, 'users', 'private-owner', 'finance')));
+    await assertFails(getDoc(doc(other, 'users', 'private-owner', 'finance', 'state')));
+    await assertFails(
+      setDoc(doc(other, 'users', 'private-owner', 'finance', 'state'), {
+        schemaVersion: 2,
+        revision: 2,
+        recordCount: 1,
+        orders: {},
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      getDoc(
+        doc(
+          environment.unauthenticatedContext().firestore(),
+          'users',
+          'private-owner',
+          'finance',
+          'people:person-0',
+        ),
+      ),
+    );
+    const secondDevice = createFinanceCloudStore(context('private-owner'), 'private-owner');
+    const restored = await new Promise((resolve, reject) => {
+      let stop;
+      const timeout = setTimeout(() => {
+        stop?.();
+        reject(new Error('Cloud listener timed out'));
+      }, 10000);
+      stop = secondDevice.watch(
+        (value) => {
+          if (value) {
+            clearTimeout(timeout);
+            stop?.();
+            resolve(value);
+          }
+        },
+        (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      );
+    });
+    assert.deepEqual(restored.data, migrateData(data));
+    assert.equal(restored.revision, 1);
+    const smaller = { ...data, people: [{ id: 'person-0', name: 'Você' }] };
+    assert.equal(await store.save(smaller, 1), 2);
+    const records = await getDocs(collection(owner, 'users', 'private-owner', 'finance'));
+    assert.equal(records.size, 4);
+    assert.equal(
+      (await getDoc(doc(owner, 'users', 'private-owner', 'finance', 'expenses:bill'))).data()
+        .revision,
+      1,
+    );
+    assert.equal(
+      (await getDoc(doc(owner, 'users', 'private-owner', 'finance', 'income:2026-10'))).data()
+        .revision,
+      1,
+    );
+    assert.equal(await store.save({ ...smaller, expenses: [] }, 2), 3);
+    assert.equal(
+      (await getDoc(doc(owner, 'users', 'private-owner', 'finance', 'expenses:bill'))).exists(),
+      false,
+    );
+    await assert.rejects(() => secondDevice.save(data, 1), { code: 'finance/conflict' });
+    assert.equal(
+      (await getDoc(doc(owner, 'users', 'private-owner', 'finance', 'state'))).data().revision,
+      3,
+    );
+    await assertFails(deleteDoc(doc(owner, 'users', 'private-owner', 'finance', 'state')));
+  },
+);
 
 test(
   'Firestore enforces invitation ownership, verified consent and immutable account links',
