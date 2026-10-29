@@ -1,0 +1,32 @@
+# Dependências e arquivos gerados
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Credenciais e configuração local
+.env
+.env.*
+!.env.example
+*-service-account.json
+serviceAccount*.json
+firebase-adminsdk*.json
+
+# Ferramentas e logs
+.vite/
+.vercel/
+.firebase/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Backups financeiros locais e materiais temporários
+backups/
+work/
+financas-*.json
+contas-a-dois-*.json
