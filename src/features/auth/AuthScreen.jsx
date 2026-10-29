@@ -83,8 +83,7 @@ export function AuthScreen() {
         <div className="auth-story-content">
           <p className="auth-eyebrow">CLAREZA PARA OS SEUS PLANOS</p>
           <h1>
-            Seu dinheiro.
-            <br />
+            Seu dinheiro. <br />
             Mais possibilidades.
           </h1>
           <p>
