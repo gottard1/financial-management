@@ -212,8 +212,8 @@ export function GroupsPanel({ data, setData, notify }) {
           <div className="empty">Cadastre a primeira pessoa para começar.</div>
         )}
         <p className="hint">
-          Os nomes e rendas podem ser atualizados em Rendas e benefícios. Os dados são locais, sem
-          convites ou acesso compartilhado nesta etapa.
+          Os nomes e rendas podem ser atualizados em Rendas e benefícios. Para vincular uma conta,
+          selecione o participante em Convites e acesso ao grupo e informe seu e-mail.
         </p>
       </section>
       <section className="panel">

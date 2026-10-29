@@ -17,6 +17,11 @@ import { SettlementsPanel } from '../features/settlements/SettlementsPanel.jsx';
 import { AuthScreen } from '../features/auth/AuthScreen.jsx';
 import { useAuth } from '../features/auth/AuthProvider.jsx';
 const monthNow = () => new Date().toLocaleDateString('sv-SE').slice(0, 7);
+const GroupSharingPanel = React.lazy(() =>
+  import('../features/groups/GroupSharingPanel.jsx').then((module) => ({
+    default: module.GroupSharingPanel,
+  })),
+);
 export function App() {
   const { user, loading, localMode } = useAuth();
   if (loading)
@@ -235,7 +240,9 @@ function FinanceApp({ storageNamespace }) {
         <div className="account-bar">
           <span>
             {localMode ? 'Modo local de desenvolvimento' : user?.email || 'Sessão autenticada'} ·
-            Dados e comprovantes neste navegador, sem sincronização.
+            {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true'
+              ? 'Dados pessoais e comprovantes neste navegador. Consulte convites em Pessoas e grupos.'
+              : 'Dados e comprovantes neste navegador, sem sincronização.'}
           </span>
           <button
             className="button secondary"
@@ -286,6 +293,21 @@ function FinanceApp({ storageNamespace }) {
             continuar.
           </div>
         )}
+        <div hidden={tab !== 'groups'}>
+          {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true' ? (
+            <React.Suspense fallback={<p role="status">Carregando compartilhamento…</p>}>
+              <GroupSharingPanel data={data} notify={setNotice} />
+            </React.Suspense>
+          ) : (
+            <section className="panel">
+              <h2>Convites e acesso ao grupo</h2>
+              <p>
+                O compartilhamento aguarda ativação neste ambiente. Você já pode cadastrar
+                participantes pelo nome.
+              </p>
+            </section>
+          )}
+        </div>
         {tab === 'people' ? (
           <IncomePanel
             key={month + '|' + person}

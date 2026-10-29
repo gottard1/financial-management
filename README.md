@@ -55,7 +55,7 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 5. Ao lançar uma despesa, selecione quem participa, a forma de divisão e quem pagou.
 6. Confira os valores antes de salvar e os acertos na visão geral do grupo.
 
-É possível usar apenas o modo individual, sem criar nenhum grupo. Uma pessoa pode participar de vários grupos. Neste protótipo local, os cadastros são registros financeiros, sem contas de acesso ou convites.
+É possível usar apenas o modo individual, sem criar nenhum grupo. Uma pessoa pode participar de vários grupos e ser cadastrada apenas pelo nome. Com o compartilhamento Firestore ativado, o administrador pode associar um e-mail ao participante existente; após confirmar o endereço e aceitar o convite no aplicativo, a pessoa consulta os dados do grupo com sua própria conta, preservando o histórico. Veja a [ativação e os limites do compartilhamento](docs/firebase-setup.md#ativar-convites-e-consulta-compartilhada).
 
 ## Funcionalidades
 

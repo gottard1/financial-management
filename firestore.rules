@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+    function group(id) {
+      return get(/databases/$(database)/documents/sharedGroups/$(id)).data;
+    }
+    function owns(id) { return signedIn() && group(id).adminUid == request.auth.uid; }
+    function membershipId(groupId) { return request.auth.uid + '_' + groupId; }
+    match /sharedGroups/{id} {
+      allow get: if signedIn() && !exists(/databases/$(database)/documents/sharedGroups/$(id)) &&
+        id.matches(request.auth.uid + '_.*');
+      allow read: if signedIn() && (resource.data.adminUid == request.auth.uid ||
+        exists(/databases/$(database)/documents/groupMemberships/$(membershipId(id))));
+      allow create: if signedIn() && request.resource.data.adminUid == request.auth.uid &&
+        id == request.auth.uid + '_' + request.resource.data.snapshot.id &&
+        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt']) &&
+        request.resource.data.revision == 1 && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn() && resource.data.adminUid == request.auth.uid &&
+        request.resource.data.adminUid == resource.data.adminUid &&
+        request.resource.data.snapshot.id == resource.data.snapshot.id &&
+        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt']) &&
+        request.resource.data.revision == resource.data.revision + 1 &&
+        request.resource.data.updatedAt == request.time;
+    }
+    match /groupInvites/{id} {
+      allow get: if signedIn() && !exists(/databases/$(database)/documents/groupInvites/$(id)) &&
+        id.matches(request.auth.uid + '_.*');
+      allow read: if signedIn() && (resource.data.adminUid == request.auth.uid ||
+        (verifiedEmail() && resource.data.email == request.auth.token.email.lower()));
+      function pendingInvite() {
+        let next = request.resource.data;
+        return next.keys().hasOnly(['groupId', 'personId', 'email', 'personName',
+          'groupName', 'adminUid', 'status', 'updatedAt']) &&
+          next.adminUid == request.auth.uid && owns(next.groupId) &&
+          id == next.groupId + '_' + next.personId &&
+          next.status == 'pending' && next.email is string &&
+          next.email == next.email.lower() && next.email.size() <= 254 &&
+          next.updatedAt == request.time;
+      }
+      allow create: if signedIn() && pendingInvite();
+      allow delete: if signedIn() && resource.data.adminUid == request.auth.uid &&
+        resource.data.status == 'pending';
+      allow update: if signedIn() && resource.data.status == 'pending' && (
+        (resource.data.adminUid == request.auth.uid && pendingInvite() &&
+          request.resource.data.groupId == resource.data.groupId &&
+          request.resource.data.personId == resource.data.personId) ||
+        (verifiedEmail() && resource.data.email == request.auth.token.email.lower() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedUid']) &&
+          request.resource.data.status == 'accepted' &&
+          request.resource.data.acceptedUid == request.auth.uid &&
+          getAfter(/databases/$(database)/documents/groupMemberships/$(membershipId(resource.data.groupId))).data.inviteId == id));
+    }
+    match /groupMemberships/{id} {
+      allow get: if signedIn() && !exists(/databases/$(database)/documents/groupMemberships/$(id)) &&
+        id.matches(request.auth.uid + '_.*');
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if verifiedEmail() &&
+        request.resource.data.keys().hasOnly(['uid', 'groupId', 'personId', 'inviteId']) &&
+        request.resource.data.uid == request.auth.uid &&
+        id == membershipId(request.resource.data.groupId) && validAcceptance();
+      function validAcceptance() {
+        let next = request.resource.data;
+        let invite = get(/databases/$(database)/documents/groupInvites/$(next.inviteId)).data;
+        let accepted = getAfter(/databases/$(database)/documents/groupInvites/$(next.inviteId)).data;
+        return invite.status == 'pending' && invite.email == request.auth.token.email.lower() &&
+          invite.groupId == next.groupId && invite.personId == next.personId &&
+          accepted.status == 'accepted' && accepted.acceptedUid == request.auth.uid;
+      }
+    }
+  }
+}
