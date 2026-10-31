@@ -9,6 +9,8 @@ import {
 } from '../../src/infrastructure/firebase/groupDeletion.js';
 import { purgeGroupHistoryBatch } from '../../src/domain/groups/groupMembers.js';
 import { nextSettlementLedger } from '../../src/domain/settlements/sharedSettlements.js';
+import { prepareEmailInvitation } from '../../src/domain/groups/emailInvitation.js';
+import { projectSharedGroup } from '../../src/domain/groups/groupSharing.js';
 import { writeSharedSettlement } from '../../src/infrastructure/firebase/sharedSettlementStore.js';
 import { migrateData, defaultIncomeConfig } from '../../src/domain/budget/workspaceCalculations.js';
 import {
@@ -247,7 +249,13 @@ const invitation = {
   status: 'pending',
 };
 const context = (uid, email = `${uid}@example.com`, verified = true) =>
-  environment.authenticatedContext(uid, { email, email_verified: verified }).firestore();
+  environment
+    .authenticatedContext(uid, {
+      email,
+      email_verified: verified,
+      firebase: { sign_in_provider: 'google.com' },
+    })
+    .firestore();
 
 before(async () => {
   if (!enabled) return;
@@ -697,5 +705,72 @@ test(
     await assertSucceeds(getDoc(ref(owner)));
     await purgeSharedGroupHistory(owner, 'receipt-owner', id);
     assert.equal((await getDoc(ref(owner))).exists(), false);
+  },
+);
+
+test(
+  'Google-only invitation links the provisional name and history without changing the personal profile',
+  { skip: !enabled },
+  async () => {
+    const owner = context('email-owner');
+    const guest = context('email-guest', 'bia@example.com');
+    const password = environment
+      .authenticatedContext('email-guest', {
+        email: 'bia@example.com',
+        email_verified: true,
+        firebase: { sign_in_provider: 'password' },
+      })
+      .firestore();
+    const base = migrateData(null);
+    base.people[0].name = 'Ana';
+    base.groups = [
+      { id: 'home', name: 'Casa', memberIds: ['person-0'], adminPersonId: 'person-0' },
+    ];
+    const prepared = prepareEmailInvitation(base, {
+      groupId: 'home',
+      email: 'bia@example.com',
+      name: 'Bia da casa',
+      newPersonId: 'b',
+    });
+    const id = 'email-owner_home',
+      invitationId = id + '_b';
+    await setDoc(doc(owner, 'sharedGroups', id), {
+      adminUid: 'email-owner',
+      snapshot: projectSharedGroup(prepared.data, 'home'),
+      revision: 1,
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(doc(owner, 'groupInvites', invitationId), {
+      groupId: id,
+      personId: 'b',
+      personName: 'Bia da casa',
+      groupName: 'Casa',
+      email: 'bia@example.com',
+      adminUid: 'email-owner',
+      status: 'pending',
+      updatedAt: serverTimestamp(),
+    });
+    await assertFails(getDoc(doc(password, 'groupInvites', invitationId)));
+    const batch = writeBatch(guest);
+    batch.set(doc(guest, 'groupMemberships', 'email-guest_' + id), {
+      uid: 'email-guest',
+      groupId: id,
+      personId: 'b',
+      inviteId: invitationId,
+    });
+    batch.update(doc(guest, 'groupInvites', invitationId), {
+      status: 'accepted',
+      acceptedUid: 'email-guest',
+    });
+    await assertSucceeds(batch.commit());
+    const personal = migrateData(null);
+    personal.people[0] = { id: 'person-0', name: 'Beatriz Silva', accountUid: 'email-guest' };
+    await createFinanceCloudStore(guest, 'email-guest').save(personal, null);
+    const shared = (await getDoc(doc(guest, 'sharedGroups', id))).data().snapshot;
+    assert.equal(shared.people.find((person) => person.id === 'b').name, 'Bia da casa');
+    await assertFails(getDoc(doc(password, 'sharedGroups', id)));
+    await assertFails(getDoc(doc(password, 'users', 'email-guest', 'finance', 'state')));
+    await assertFails(getDoc(doc(owner, 'users', 'email-guest', 'finance', 'state')));
+    await assertFails(getDoc(doc(guest, 'invitationLookupLimits', 'email-owner')));
   },
 );

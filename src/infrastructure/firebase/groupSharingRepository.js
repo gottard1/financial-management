@@ -106,8 +106,9 @@ export async function acceptGroupInvite(inviteId) {
   const db = database();
   const user = auth.currentUser;
   await user.reload();
-  await user.getIdToken(true);
-  if (!user.emailVerified) throw new Error('Confirme seu e-mail antes de aceitar o convite.');
+  const token = await user.getIdTokenResult(true);
+  if (token.signInProvider !== 'google.com' || !user.emailVerified)
+    throw new Error('Entre com a conta Google do e-mail convidado para aceitar.');
   await runTransaction(db, async (transaction) => {
     const inviteRef = doc(db, 'groupInvites', inviteId);
     const current = await transaction.get(inviteRef);

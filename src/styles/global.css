@@ -2897,6 +2897,11 @@ dialog {
   align-items: center;
 }
 
+.profile-panel {
+  display: grid;
+  gap: 1.25rem;
+}
+
 .quick-receipt-actions form {
   flex-basis: 100%;
   display: flex;

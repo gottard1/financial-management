@@ -5,7 +5,7 @@ const NAVIGATION = [
   ['comparison', '▥', 'Comparar meses', 'Meses'],
   ['budget', '▦', 'Orçamento', 'Plano'],
   ['savings', '◎', 'Metas e reservas', 'Metas'],
-  ['people', '♧', 'Rendas e benefícios', 'Rendas'],
+  ['people', '♧', 'Perfil', 'Perfil'],
   ['groups', '♙', 'Pessoas e grupos', 'Grupos'],
 ];
 export function AppSidebar({ tab, onNavigate, onExport, cloudEnabled = false }) {

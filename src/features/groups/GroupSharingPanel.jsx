@@ -1,10 +1,14 @@
+import { prepareEmailInvitation } from '../../domain/groups/emailInvitation.js';
+import { lookupInviteAccount } from '../../infrastructure/firebase/inviteAccountLookup.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { sendEmailVerification } from 'firebase/auth';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { money } from '../../domain/expenses/expenseCalculations.js';
-import { normalizeInviteEmail, projectSharedGroup } from '../../domain/groups/groupSharing.js';
+import {
+  normalizeInviteEmail,
+  projectSharedGroup,
+  invitableGroupMembers,
+} from '../../domain/groups/groupSharing.js';
 import { stableJson } from '../../domain/budget/financeCloudCodec.js';
-import { activeGroupMembers } from '../../domain/groups/groupMembers.js';
 import {
   acceptGroupInvite,
   cancelGroupInvite,
@@ -160,24 +164,29 @@ export function SharedGroupView({ membership, referenceMonth }) {
   );
 }
 
-export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
+export function GroupSharingPanel({ data, commitData, notify, syncBlocked = false }) {
   const { user, localMode } = useAuth();
   const [owned, setOwned] = useState([]);
   const [sent, setSent] = useState([]);
   const [received, setReceived] = useState([]);
   const [memberships, setMemberships] = useState([]);
-  const [groupId, setGroupId] = useState('');
+  const [groupId, setGroupId] = useState(() => data.groups.find((item) => !item.deleted)?.id || '');
   const [personId, setPersonId] = useState('');
   const [email, setEmail] = useState('');
+  const [lookup, setLookup] = useState(null);
+  const [inviteName, setInviteName] = useState('');
+  const [editingInvite, setEditingInvite] = useState(null);
+  const sharingOperation = useRef(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [section, setSection] = useState('manage');
-  const [verified, setVerified] = useState(Boolean(user?.emailVerified));
   const ownedRef = useRef(owned);
   ownedRef.current = owned;
   const previousData = useRef(data);
   const inviteForm = useRef();
   const group = data.groups.find((item) => item.id === groupId);
+  const invitees = invitableGroupMembers(group);
+  const selectedInvitee = invitees.includes(personId) ? personId : '';
   const pendingReceived = received.filter((item) => item.status === 'pending');
   const pendingSent = sent.filter((item) => item.status === 'pending');
   const fail = () =>
@@ -197,12 +206,12 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
       watchSharing('groupInvites', 'adminUid', user.uid, setSent, fail),
       watchSharing('groupMemberships', 'uid', user.uid, setMemberships, fail),
     ];
-    if (verified && user.email)
+    if (user.emailVerified && user.email)
       stops.push(
         watchSharing('groupInvites', 'email', user.email.toLowerCase(), setReceived, fail),
       );
     return () => stops.forEach((stop) => stop());
-  }, [user?.uid, localMode, verified]);
+  }, [user?.uid, localMode, user?.emailVerified]);
 
   // Only local edits made while this panel is mounted publish automatically. Never upload on load.
   useEffect(() => {
@@ -210,6 +219,7 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
     previousData.current = data;
     if (!sharingEnabled || !user || localMode || syncBlocked) return undefined;
     const timer = setTimeout(async () => {
+      if (sharingOperation.current) return;
       try {
         for (const shared of ownedRef.current) {
           if (
@@ -229,6 +239,8 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
   }, [data, user?.uid, localMode, syncBlocked]);
 
   async function run(operation) {
+    if (sharingOperation.current) return;
+    sharingOperation.current = true;
     setBusy(true);
     setError('');
     try {
@@ -240,33 +252,85 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
           : err.message,
       );
     } finally {
+      sharingOperation.current = false;
       setBusy(false);
     }
+  }
+  async function findAccount() {
+    await run(async () => {
+      if (!group?.adminPersonId || group.deleted)
+        throw new Error('Selecione um grupo ativo e identifique quem é você nele.');
+      const normalized = normalizeInviteEmail(email);
+      if (normalized === user.email.toLowerCase())
+        throw new Error('Sua conta já administra este grupo. Informe outro e-mail.');
+      const id = sharedGroupId(user.uid, group.id);
+      const existingInvite = sent.find(
+        (item) => item.groupId === id && item.email === normalized && item.status !== 'revoked',
+      );
+      if (existingInvite?.status === 'accepted')
+        throw new Error('Esta conta já participa do grupo.');
+      const current = ownedRef.current.find((item) => item.id === id);
+      await publishGroup(data, group.id, current?.revision ?? null);
+      const result = await lookupInviteAccount(id, normalized);
+      setLookup({ ...result, email: normalized, groupId: group.id });
+      setInviteName(result.name || '');
+      setPersonId(
+        editingInvite?.personId ||
+          existingInvite?.personId ||
+          invitees.find(
+            (id) => data.people.find((person) => person.id === id)?.inviteEmail === normalized,
+          ) ||
+          '',
+      );
+    });
   }
   async function invite(event) {
     event.preventDefault();
     await run(async () => {
-      if (!activeGroupMembers(group).includes(personId))
-        throw new Error('Selecione um participante do grupo.');
-      if (!group.adminPersonId)
-        throw new Error('Edite o grupo e escolha seu nome em “Quem é você neste grupo?”.');
-      if (personId === group.adminPersonId)
-        throw new Error(
-          'Seu nome já está vinculado à conta que administra o grupo. Convide outro participante.',
-        );
-      normalizeInviteEmail(email);
+      const normalized = normalizeInviteEmail(email);
+      if (!group || lookup?.email !== normalized || lookup?.groupId !== group.id)
+        throw new Error('Consulte este e-mail antes de enviar o convite.');
       const id = sharedGroupId(user.uid, group.id);
-      const current = owned.find((item) => item.id === id);
-      await publishGroup(data, group.id, current?.revision ?? null);
-      await saveGroupInvite(
-        id,
-        personId,
-        email,
-        data.people.find((person) => person.id === personId).name,
-        group.name,
+      if (
+        editingInvite &&
+        !sent.some((item) => item.id === editingInvite.id && item.status === 'pending')
+      )
+        throw new Error(
+          'Este convite não está mais pendente. Atualize a página antes de continuar.',
+        );
+      const previousInvite = sent.find(
+        (item) => item.groupId === id && item.email === normalized && item.status !== 'revoked',
       );
+      if (previousInvite?.status === 'accepted')
+        throw new Error('Esta conta já participa do grupo.');
+      if (personId && previousInvite && previousInvite.personId !== personId)
+        throw new Error(
+          'Este e-mail já tem convite para outro participante deste grupo. Cancele o convite anterior antes de alterar o vínculo.',
+        );
+      const newPersonId = crypto.randomUUID();
+      let prepared;
+      const next = await commitData((current) => {
+        prepared = prepareEmailInvitation(current, {
+          groupId: group.id,
+          email: normalized,
+          name: inviteName,
+          personId: personId || previousInvite?.personId,
+          newPersonId,
+          previousEmail: editingInvite?.email,
+        });
+        return prepared.data;
+      });
+      const current = ownedRef.current.find((item) => item.id === id);
+      await publishGroup(next, group.id, current?.revision ?? null);
+      await saveGroupInvite(id, prepared.personId, normalized, prepared.personName, group.name);
       setEmail('');
-      notify?.('Convite disponível no aplicativo para o e-mail informado.');
+      setLookup(null);
+      setInviteName('');
+      setPersonId('');
+      setEditingInvite(null);
+      notify?.(
+        'Convite criado. O nome e o histórico do participante serão mantidos quando a pessoa aceitar com Google.',
+      );
     });
   }
   if (!user || localMode)
@@ -295,8 +359,8 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
         <p className="eyebrow">PARTICIPAÇÃO E ACESSO</p>
         <h2 id="sharing-title">Convites e acesso ao grupo</h2>
         <p className="muted">
-          Adicione o e-mail de uma pessoa já cadastrada. Quando ela entrar com esse e-mail
-          confirmado e aceitar, terá acesso ao histórico do participante, sem duplicar o cadastro.
+          Informe o e-mail da pessoa. Você pode convidar quem já tem conta ou cadastrar um nome
+          provisório. O acesso é liberado após entrar com Google e aceitar o convite.
         </p>
         <p className="hint">
           Os convites aparecem dentro do aplicativo. Compartilhe o endereço do site com a pessoa.
@@ -336,38 +400,6 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
           {error}
         </p>
       )}
-      {section === 'received' && !verified && (
-        <div className="notice">
-          <p>Confirme seu e-mail para consultar e aceitar convites recebidos.</p>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                await sendEmailVerification(user);
-                notify?.('Mensagem de confirmação enviada ao seu e-mail.');
-              })
-            }
-          >
-            Enviar confirmação
-          </button>{' '}
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                await user.reload();
-                await user.getIdToken(true);
-                setVerified(user.emailVerified);
-                if (!user.emailVerified)
-                  throw new Error('O e-mail ainda não foi confirmado. Abra o link recebido.');
-              })
-            }
-          >
-            Já confirmei meu e-mail
-          </button>
-        </div>
-      )}
       <section
         className="panel"
         hidden={section !== 'manage'}
@@ -380,24 +412,36 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
           </div>
         </div>
         <p className="muted">
-          Escolha uma pessoa que já participa do grupo e vincule o e-mail dela.
+          Comece pelo e-mail. O nome no grupo pode ser diferente do nome do perfil da pessoa.
         </p>
         {!data.groups.length && (
           <p className="notice">
             Cadastre as pessoas e crie um grupo abaixo para começar a convidar.
           </p>
         )}
-        <form ref={inviteForm} onSubmit={invite} className="sharing-invite-form">
+        <form
+          ref={inviteForm}
+          onSubmit={(event) => {
+            if (!lookup) {
+              event.preventDefault();
+              findAccount();
+            } else invite(event);
+          }}
+          className="sharing-invite-form"
+        >
           <label className="field">
             Grupo que você administra
             <select
               required
-              disabled={!data.groups.some((item) => !item.deleted)}
+              disabled={busy || !data.groups.some((item) => !item.deleted)}
               value={groupId}
               onChange={(event) => {
                 setGroupId(event.target.value);
                 setPersonId('');
                 setEmail('');
+                setLookup(null);
+                setInviteName('');
+                setEditingInvite(null);
               }}
             >
               <option value="">Selecione um grupo</option>
@@ -410,40 +454,120 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
                 ))}
             </select>
           </label>
+          {group && (
+            <p className="hint">
+              {group.adminPersonId ? (
+                <>
+                  Sua conta administra este grupo como{' '}
+                  <strong>
+                    {data.people.find((person) => person.id === group.adminPersonId)?.name}
+                  </strong>
+                  . Esse participante já tem acesso e não precisa de convite. Se o nome estiver
+                  incorreto, edite o grupo abaixo e corrija “Quem é você neste grupo?”.
+                </>
+              ) : (
+                <>
+                  Edite o grupo abaixo e escolha seu nome em “Quem é você neste grupo?” antes de
+                  convidar.
+                </>
+              )}
+            </p>
+          )}
           <label className="field">
-            Participante existente
-            <select
-              required
-              disabled={!group}
-              value={personId}
-              onChange={(event) => {
-                setPersonId(event.target.value);
-                setEmail('');
-              }}
-            >
-              <option value="">Selecione uma pessoa</option>
-              {activeGroupMembers(group).map((id) => (
-                <option key={id} value={id}>
-                  {data.people.find((person) => person.id === id)?.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            E-mail para vincular{' '}
+            E-mail da pessoa
             <input
               required
               type="email"
               maxLength={254}
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              disabled={busy}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setLookup(null);
+                setInviteName('');
+                setPersonId('');
+              }}
             />
           </label>
-          <div className="form-actions">
-            <button className="button primary" disabled={busy || !group || !personId}>
-              {busy ? 'Salvando…' : 'Salvar convite'}
-            </button>
-          </div>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={busy || !group?.adminPersonId || !email}
+            onClick={findAccount}
+          >
+            {busy ? 'Aguarde…' : 'Consultar e-mail'}
+          </button>
+          {lookup && (
+            <>
+              <p className="notice">
+                {lookup.found
+                  ? 'Conta encontrada. Confira o nome que será usado neste grupo.'
+                  : 'Esta pessoa ainda não tem uma conta Google cadastrada no site. Informe como ela será chamada neste grupo.'}
+              </p>
+              <label className="field">
+                Nome no grupo
+                <input
+                  required={!selectedInvitee}
+                  maxLength={60}
+                  value={
+                    selectedInvitee
+                      ? data.people.find((person) => person.id === selectedInvitee)?.name ||
+                        inviteName
+                      : inviteName
+                  }
+                  disabled={busy || Boolean(selectedInvitee)}
+                  onChange={(event) => setInviteName(event.target.value)}
+                />
+                <small>
+                  Este nome será mantido no grupo após o aceite. O perfil pessoal continua
+                  independente.
+                </small>
+              </label>
+              {invitees.length > 0 && (
+                <label className="field">
+                  Já existe um cadastro desta pessoa no grupo? (opcional)
+                  <select
+                    value={selectedInvitee}
+                    disabled={busy || Boolean(editingInvite)}
+                    onChange={(event) => setPersonId(event.target.value)}
+                  >
+                    <option value="">Criar participante com o nome acima</option>
+                    {invitees.map((id) => (
+                      <option key={id} value={id}>
+                        {data.people.find((person) => person.id === id)?.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small>
+                    Escolha um cadastro existente para preservar todas as despesas e o nome dele.
+                  </small>
+                </label>
+              )}
+              <div className="form-actions">
+                {editingInvite && (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditingInvite(null);
+                      setLookup(null);
+                      setEmail('');
+                      setPersonId('');
+                    }}
+                  >
+                    Cancelar edição
+                  </button>
+                )}
+                <button
+                  className="button primary"
+                  disabled={busy || syncBlocked || !group?.adminPersonId}
+                >
+                  {busy ? 'Salvando…' : 'Enviar convite'}
+                </button>
+              </div>
+            </>
+          )}
         </form>
       </section>
       <section className="panel" hidden={section !== 'manage'} aria-labelledby="invite-sent-title">
@@ -485,8 +609,11 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
                           (candidate) => sharedGroupId(user.uid, candidate.id) === item.groupId,
                         )?.id;
                         setGroupId(localId || '');
+                        setEditingInvite(item);
                         setPersonId(item.personId);
                         setEmail(item.email);
+                        setLookup(null);
+                        setInviteName(item.personName);
                         inviteForm.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                       }}
                     >
@@ -576,7 +703,7 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
             </li>
           ))}
         </ul>
-        {verified && !pendingReceived.length && (
+        {!pendingReceived.length && (
           <div className="empty">
             <strong>Nenhum convite pendente</strong>
             <p>Quando alguém convidar seu e-mail, o convite aparecerá aqui.</p>

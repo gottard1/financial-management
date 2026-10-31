@@ -2,6 +2,7 @@ import { useOwnedGroupSettlements } from '../hooks/useOwnedGroupSettlements.js';
 import { mergeSharedSettlements } from '../domain/settlements/sharedSettlements.js';
 import { saveSharedSettlement } from '../infrastructure/firebase/sharedSettlementRepository.js';
 import { useFinanceData } from '../hooks/useFinanceData.js';
+import { applyGoogleAccountName } from '../domain/groups/accountIdentity.js';
 import { exportFinanceData } from '../infrastructure/storage/localFinanceRepository.js';
 import { useSharedMemberships } from '../hooks/useSharedMemberships.js';
 import { AppSidebar } from '../components/layout/AppSidebar.jsx';
@@ -19,7 +20,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { parseMoney, splitExpense } from '../domain/expenses/expenseCalculations.js';
 import { calculateWorkspace } from '../domain/budget/workspaceCalculations.js';
 import { sumRestrictedBenefits } from '../domain/income/calculateCompensation.js';
-import { IncomePanel } from '../features/income/IncomePanel.jsx';
+import { ProfilePanel } from '../features/profile/ProfilePanel.jsx';
 import { BudgetPanel } from '../features/budget/BudgetPanel.jsx';
 import { SavingsPanel } from '../features/savings/SavingsPanel.jsx';
 import { GroupsPanel } from '../features/groups/GroupsPanel.jsx';
@@ -132,6 +133,15 @@ function FinanceApp({ storageNamespace }) {
   useEffect(() => {
     if (personId !== person) setPerson(person);
   }, [personId, person]);
+  useEffect(() => {
+    if (!user || localMode || blocked || (cloudEnabled && syncStatus !== 'saved')) return;
+    if (applyGoogleAccountName(privateData, user) === privateData) return;
+    try {
+      setData((current) => applyGoogleAccountName(current, user));
+    } catch (err) {
+      setError(err.message);
+    }
+  }, [privateData, user, localMode, blocked, cloudEnabled, syncStatus]);
   function close() {
     setDraft(null);
     setError('');
@@ -308,7 +318,7 @@ function FinanceApp({ storageNamespace }) {
                   expenses: 'Cada gasto no seu lugar.',
                   budget: 'Um plano para cada real.',
                   savings: 'Dê forma aos seus planos.',
-                  people: 'Entenda quanto fica com você.',
+                  people: 'Seu perfil, do seu jeito.',
                   groups: 'Pessoas, grupos e planos.',
                   settlements: 'Repasses, sem perder o histórico.',
                   comparison: 'Cada mês conta uma história.',
@@ -364,13 +374,15 @@ function FinanceApp({ storageNamespace }) {
           }}
         />
         <div inert={blocked ? true : undefined}>
-          <WorkspaceSelector
-            {...{ mode, setMode, person, setPerson, setGroupId, tab }}
-            groupId={selectedGroupId}
-            people={data.people}
-            groups={[...data.groups, ...sharedGroups]}
-            onClearError={() => setError('')}
-          />
+          {tab !== 'people' && (
+            <WorkspaceSelector
+              {...{ mode, setMode, person, setPerson, setGroupId, tab }}
+              groupId={selectedGroupId}
+              people={data.people}
+              groups={[...data.groups, ...sharedGroups]}
+              onClearError={() => setError('')}
+            />
+          )}
           {mode === 'group' &&
             group &&
             !selectedSharedGroup &&
@@ -418,7 +430,12 @@ function FinanceApp({ storageNamespace }) {
           <div hidden={tab !== 'groups'}>
             {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true' ? (
               <React.Suspense fallback={<p role="status">Carregando compartilhamento…</p>}>
-                <GroupSharingPanel data={privateData} notify={setNotice} syncBlocked={blocked} />
+                <GroupSharingPanel
+                  data={privateData}
+                  commitData={commitData}
+                  notify={setNotice}
+                  syncBlocked={blocked}
+                />
               </React.Suspense>
             ) : (
               <section className="panel">
@@ -431,11 +448,7 @@ function FinanceApp({ storageNamespace }) {
             )}
           </div>
           {tab === 'people' ? (
-            <IncomePanel
-              key={month + '|' + person}
-              {...{ data, setData, month, person }}
-              notify={setNotice}
-            />
+            <ProfilePanel {...{ data: privateData, setData, month, user }} notify={setNotice} />
           ) : tab === 'groups' ? (
             <GroupsPanel
               {...{ data, setData, commitData }}

@@ -6,7 +6,6 @@ import { defaultIncomeConfig } from '../../domain/budget/workspaceCalculations.j
 
 const numberText = (cents) => (cents / 100).toFixed(2).replace('.', ',');
 export function IncomePanel({ data, setData, month, person, notify }) {
-  const currentPerson = data.people.find((item) => item.id === person);
   const saved = {
     ...defaultIncomeConfig(data.months[month]?.[person] || 0),
     ...(data.incomeConfigs[month]?.[person] || {}),
@@ -21,7 +20,6 @@ export function IncomePanel({ data, setData, month, person, notify }) {
     foodAllowance: numberText(saved.foodAllowance),
     mealAllowance: numberText(saved.mealAllowance),
   });
-  const [name, setName] = useState(currentPerson.name);
   const [error, setError] = useState('');
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   let result = null,
@@ -50,26 +48,13 @@ export function IncomePanel({ data, setData, month, person, notify }) {
         r = calculateCompensation(c);
       if (r.net < 0)
         throw Error('Os descontos excedem a renda. Revise os valores antes de salvar.');
-      if (!name.trim()) throw Error('Informe o nome.');
-      if (
-        data.people.some(
-          (item) =>
-            item.id !== person &&
-            item.name.trim().toLocaleLowerCase('pt-BR') === name.trim().toLocaleLowerCase('pt-BR'),
-        )
-      )
-        throw Error('Já existe uma pessoa com esse nome.');
       setData((d) => {
-        const people = d.people.map((item) =>
-          item.id === person ? { ...item, name: name.trim() } : item,
-        );
         const incomes = { ...(d.months[month] || {}) };
         incomes[person] = r.net;
         const configs = { ...(d.incomeConfigs[month] || {}) };
         configs[person] = c;
         return {
           ...d,
-          people,
           months: { ...d.months, [month]: incomes },
           incomeConfigs: { ...d.incomeConfigs, [month]: configs },
         };
@@ -84,17 +69,13 @@ export function IncomePanel({ data, setData, month, person, notify }) {
   }
   return (
     <section className="panel income-panel">
-      <p className="eyebrow">SUA RENDA, COM CLAREZA</p>
-      <h2>Seu dinheiro e seus benefícios</h2>
+      <p className="eyebrow">INFORMAÇÕES FINANCEIRAS DO PERFIL</p>
+      <h2>Renda e benefícios</h2>
       <p className="muted section-intro">
-        Configure a renda de {currentPerson.name} neste mês. O dinheiro disponível alimenta o
-        orçamento e a divisão proporcional; VA e VR ficam separados.
+        Configure sua renda de {month.split('-').reverse().join('/')}. O dinheiro disponível
+        alimenta o orçamento e a divisão proporcional; VA e VR ficam separados.
       </p>
       <form className="income-form" onSubmit={save}>
-        <label className="field">
-          Nome
-          <input required maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
         <fieldset className="form-section">
           <legend>1. Como você recebe?</legend>
           <div className="income-type-grid">

@@ -1,10 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
-  createUserWithEmailAndPassword,
   GoogleAuthProvider,
   onAuthStateChanged,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
@@ -16,18 +13,7 @@ import {
 
 const AuthContext = createContext(null);
 const ERRORS = {
-  'auth/invalid-email': 'Confira o endereço de e-mail informado.',
-  'auth/missing-email': 'Informe seu e-mail para continuar.',
-  'auth/missing-password': 'Informe sua senha para continuar.',
-  'auth/invalid-credential': 'E-mail ou senha incorretos. Confira os dados e tente novamente.',
-  'auth/invalid-login-credentials':
-    'E-mail ou senha incorretos. Confira os dados e tente novamente.',
-  'auth/wrong-password': 'E-mail ou senha incorretos. Confira os dados e tente novamente.',
-  'auth/user-not-found': 'E-mail ou senha incorretos. Confira os dados e tente novamente.',
-  'auth/email-already-in-use': 'Já existe uma conta com este e-mail. Entre ou recupere sua senha.',
-  'auth/weak-password': 'Escolha uma senha mais forte, com pelo menos 6 caracteres.',
-  'auth/password-does-not-meet-requirements':
-    'A senha não atende aos requisitos configurados. Use uma senha mais forte.',
+  'auth/invalid-credential': 'Não foi possível validar sua conta Google. Tente entrar novamente.',
   'auth/user-disabled':
     'O acesso desta conta está desativado. Entre em contato com quem administra o projeto.',
   'auth/too-many-requests':
@@ -43,7 +29,7 @@ const ERRORS = {
   'auth/unauthorized-domain':
     'Este endereço do site precisa ser autorizado no Firebase Authentication.',
   'auth/account-exists-with-different-credential':
-    'Este e-mail já usa outra forma de acesso. Entre pelo método usado no cadastro.',
+    'Este e-mail possui um acesso antigo. A administração precisa vincular a conta Google ao mesmo cadastro, preservando seu histórico.',
   'auth/invalid-api-key': 'A configuração do Firebase precisa ser revisada antes de entrar.',
   'auth/app-not-authorized': 'Este site ainda não está autorizado para acessar o projeto Firebase.',
   'auth/configuration-not-found':
@@ -83,9 +69,29 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return undefined;
     }
-    return onAuthStateChanged(
+    let generation = 0;
+    const stop = onAuthStateChanged(
       auth,
-      (nextUser) => {
+      async (nextUser) => {
+        const session = ++generation;
+        if (nextUser) {
+          try {
+            const token = await nextUser.getIdTokenResult();
+            if (session !== generation || auth.currentUser?.uid !== nextUser.uid) return;
+            if (token.signInProvider !== 'google.com') {
+              await firebaseSignOut(auth);
+              setUser(null);
+              setLoading(false);
+              return;
+            }
+          } catch {
+            if (session === generation) {
+              setUser(null);
+              setLoading(false);
+            }
+            return;
+          }
+        }
         setUser(nextUser);
         setLocalMode(false);
         setLoading(false);
@@ -96,17 +102,11 @@ export function AuthProvider({ children }) {
         setConfigError(translatedError(error).message);
       },
     );
+    return () => {
+      generation += 1;
+      stop();
+    };
   }, []);
-  const signIn = useCallback(
-    (email, password) =>
-      authenticate(() => signInWithEmailAndPassword(requireAuth(), email.trim(), password)),
-    [],
-  );
-  const signUp = useCallback(
-    (email, password) =>
-      authenticate(() => createUserWithEmailAndPassword(requireAuth(), email.trim(), password)),
-    [],
-  );
   const signInGoogle = useCallback(
     () =>
       authenticate(() => {
@@ -114,10 +114,6 @@ export function AuthProvider({ children }) {
         provider.setCustomParameters({ prompt: 'select_account' });
         return signInWithPopup(requireAuth(), provider);
       }),
-    [],
-  );
-  const resetPassword = useCallback(
-    (email) => authenticate(() => sendPasswordResetEmail(requireAuth(), email.trim())),
     [],
   );
   const signOut = useCallback(async () => {
@@ -138,26 +134,12 @@ export function AuthProvider({ children }) {
       user,
       loading,
       localMode,
-      signIn,
-      signUp,
       signInGoogle,
-      resetPassword,
       signOut,
       enterLocalMode,
       configError,
     }),
-    [
-      user,
-      loading,
-      localMode,
-      signIn,
-      signUp,
-      signInGoogle,
-      resetPassword,
-      signOut,
-      enterLocalMode,
-      configError,
-    ],
+    [user, loading, localMode, signInGoogle, signOut, enterLocalMode, configError],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

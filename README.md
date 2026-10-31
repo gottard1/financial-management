@@ -49,16 +49,23 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 ## Como começar
 
 1. Em **Pessoas e grupos**, cadastre as pessoas.
-2. Crie um grupo com pelo menos duas pessoas, como Casa, Família ou Viagem. Não há limite fixo de participantes.
-3. Em **Rendas e benefícios**, selecione uma pessoa e salve a renda do mês.
+2. Crie um grupo com seu nome, como Casa, Família ou Viagem, e convide outras pessoas por e-mail. Não há limite fixo de participantes.
+3. Em **Perfil**, confira seus dados e salve sua renda e seus benefícios do mês.
 4. Use **Individual** para os gastos pessoais ou **Grupo** para escolher um espaço compartilhado.
 5. Ao lançar uma despesa, selecione quem participa, a forma de divisão e quem pagou.
 6. Confira os valores antes de salvar e os acertos na visão geral do grupo.
 7. Abra **Comparar meses** para ver a evolução dos gastos, totais pagos e pendentes e despesas por categoria em um período de até 24 meses.
 
-É possível usar apenas o modo individual, sem criar nenhum grupo. Uma pessoa pode participar de vários grupos e ser cadastrada apenas pelo nome. Com o compartilhamento Firestore ativado, o administrador pode associar um e-mail ao participante existente; após confirmar o endereço e aceitar o convite no aplicativo, a pessoa consulta os dados do grupo com sua própria conta, preservando o histórico. Veja a [ativação e os limites do compartilhamento](docs/firebase-setup.md#ativar-convites-e-consulta-compartilhada).
+É possível usar apenas o modo individual, sem criar nenhum grupo. Uma pessoa pode participar de vários grupos e ser cadastrada apenas pelo nome. Com o compartilhamento Firestore ativado, o administrador pode associar um e-mail ao participante existente; após entrar com Google e aceitar o convite no aplicativo, a pessoa consulta os dados do grupo com sua própria conta, preservando o histórico. Veja a [ativação e os limites do compartilhamento](docs/firebase-setup.md#ativar-convites-e-consulta-compartilhada).
 
 ## Funcionalidades
+
+### Perfil
+
+- A aba **Perfil** reúne os dados pessoais da própria conta e a renda e os benefícios de cada mês.
+- Permite editar nome, telefone, cidade e ocupação. O e-mail de acesso aparece somente para consulta.
+- O login Google preenche o nome inicial automaticamente. Nomes personalizados são preservados.
+- Telefone, cidade, ocupação, salário e benefícios não são publicados na projeção compartilhada dos grupos.
 
 ### Espaço individual
 
@@ -243,7 +250,7 @@ O projeto permanece privado, sem licença de distribuição definida. Uma licen�
 
 ## Login e publicação
 
-A tela de login Firebase está implementada com e-mail/senha, Google, cadastro e recuperação de acesso. Configure o aplicativo Web e os provedores seguindo [Firebase e Vercel](docs/firebase-setup.md). Sem configuração, o login fica pendente. O modo local sem autenticação está disponível somente em desenvolvimento; produção não oferece esse acesso.
+O acesso usa exclusivamente Google; o primeiro login cria a conta automaticamente. Convites começam pelo e-mail, com consulta autenticada do nome no servidor e nome provisório para quem ainda não tem conta. Configure o aplicativo Web e os provedores seguindo [Firebase e Vercel](docs/firebase-setup.md). Sem configuração, o login fica pendente. O modo local sem autenticação está disponível somente em desenvolvimento; produção não oferece esse acesso.
 
 O SDK autentica a conta e os dados financeiros usam Firestore com regras privadas por UID. Os arquivos de comprovantes permanecem locais. Dados antigos do modo local são preservados e não são importados automaticamente para uma conta autenticada. Consulte [ativação e migração](docs/firebase-setup.md#persistência-financeira-privada).
 

@@ -24,6 +24,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
   const [personError, setPersonError] = useState('');
   const [groupError, setGroupError] = useState('');
   const people = data.people || [];
+  const accountPerson = people.find((person) => person.accountUid === user?.uid && user?.uid);
   const groups = (data.groups || []).filter((group) => !group.deleted);
   const archivedGroups = (data.groups || []).filter((group) => group.deleted);
   const editing = groups.find((group) => group.id === editingId);
@@ -81,8 +82,10 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
       return;
     }
     const members = [...new Set([...activeGroupMembers(editing), ...memberIds])];
-    if (members.length < (editingId ? 1 : 2)) {
-      setGroupError('Selecione pelo menos duas pessoas para compartilhar as contas.');
+    if (members.length < 1) {
+      setGroupError(
+        'Selecione seu nome para criar o grupo. Você pode convidar outras pessoas por e-mail depois.',
+      );
       return;
     }
     if (members.some((id) => !people.some((person) => person.id === id))) {
@@ -94,7 +97,9 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
       setGroupError('Edite o cadastro “Você” e informe o nome da pessoa antes de salvar o grupo.');
       return;
     }
-    if (!members.includes(adminPersonId)) {
+    const selectedAdminId =
+      adminPersonId || (members.includes(accountPerson?.id) ? accountPerson.id : '');
+    if (!members.includes(selectedAdminId)) {
       setGroupError('Escolha quem é você entre os participantes do grupo.');
       return;
     }
@@ -106,7 +111,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
               ? {
                   ...group,
                   name,
-                  adminPersonId,
+                  adminPersonId: selectedAdminId,
                   memberIds: [...new Set([...group.memberIds, ...members])],
                   removedMemberIds: (group.removedMemberIds || []).filter(
                     (id) => !members.includes(id),
@@ -114,7 +119,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
                 }
               : group,
           )
-        : [...current.groups, { id, name, memberIds: members, adminPersonId }],
+        : [...current.groups, { id, name, memberIds: members, adminPersonId: selectedAdminId }],
     }));
     notify?.(
       editingId
@@ -308,7 +313,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
               <legend>
                 {editingId
                   ? 'Participantes ativos · adicione ou reative pessoas'
-                  : 'Participantes · selecione pelo menos 2'}
+                  : 'Participantes · selecione seu nome para começar'}
               </legend>
               {people.length ? (
                 <div className="group-member-options">
@@ -345,7 +350,9 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
               Quem é você neste grupo?
               <select
                 required
-                value={adminPersonId}
+                value={
+                  adminPersonId || (memberIds.includes(accountPerson?.id) ? accountPerson.id : '')
+                }
                 onChange={(event) => setAdminPersonId(event.target.value)}
               >
                 <option value="">Selecione seu nome</option>
@@ -361,6 +368,9 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
                 Vincula sua conta ao seu nome para confirmar somente os recebimentos destinados a
                 você.
               </small>
+              {accountPerson && (
+                <small>Nome preenchido a partir da sua conta Google: {accountPerson.name}.</small>
+              )}
             </label>
             {editingId && (
               <p className="hint">
@@ -382,7 +392,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
               )}
               <button
                 className="button primary"
-                disabled={Boolean(removing) || (!editingId && people.length < 2)}
+                disabled={Boolean(removing) || (!editingId && people.length < 1)}
               >
                 {editingId ? 'Salvar grupo' : 'Criar grupo'}
               </button>
@@ -426,8 +436,9 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
           <div className="empty">Cadastre a primeira pessoa para começar.</div>
         )}
         <p className="hint">
-          Os nomes e rendas podem ser atualizados em Rendas e benefícios. Para vincular uma conta,
-          selecione o participante em Convites e acesso ao grupo e informe seu e-mail.
+          Seus dados e sua renda podem ser atualizados em Perfil. Use Editar nome para os demais
+          cadastros. Para vincular uma conta, selecione o participante em Convites e acesso ao grupo
+          e informe seu e-mail.
         </p>
       </section>
       <section className="panel">

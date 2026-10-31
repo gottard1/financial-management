@@ -2,7 +2,7 @@
 
 ## Estado desta integração
 
-A tela de acesso usa o SDK oficial do Firebase Authentication: e-mail/senha, criação de conta, recuperação de senha e Google. O código está pronto; a conexão real depende das configurações Web do projeto Firebase e dos provedores habilitados.
+A tela de acesso usa o SDK oficial do Firebase Authentication exclusivamente com Google. O primeiro login cria a conta; cadastro com senha e recuperação de senha foram removidos. As regras do Firestore também exigem uma sessão autenticada com Google. O código está pronto; a conexão real depende das configurações Web do projeto Firebase e dos provedores habilitados.
 
 Os dados financeiros são sincronizados em uma área privada por UID no Cloud Firestore, com uma cópia local para alterações pendentes. Os arquivos de comprovantes continuam locais. O compartilhamento opcional publica apenas os dados do grupo e vincula contas a participantes existentes mediante convite e aceite. A opção de desenvolvimento conserva os dados locais anteriores sem importá-los automaticamente para uma conta.
 
@@ -45,11 +45,11 @@ O gráfico e as tabelas exibem renda em dinheiro, despesas pagas e pendentes, m�
 1. Crie o banco **Cloud Firestore padrão**, em modo de produção, no mesmo projeto usado pelo Authentication. Escolha a localização antes de criar o banco.
 2. Publique as regras do arquivo `firestore.rules`. Pelo Console, copie esse arquivo para a aba Regras do Firestore e publique. Com Firebase CLI autenticado, a alternativa é `npx firebase deploy --only firestore:rules --project financial-management-262fb`. Este comando não publica o site.
 3. Configure `VITE_GROUP_SHARING_ENABLED=true` no ambiente desejado da Vercel e gere um novo deploy. Localmente, adicione a variável a `.env.local` e reinicie o Vite. Sem essa variável, apenas os convites e a consulta compartilhada ficam desativados; a sincronização financeira privada continua ativa por padrão.
-4. Em **Pessoas e grupos**, cadastre os nomes e o grupo. Em **Convites e acesso ao grupo**, escolha o grupo e o participante existente e informe o e-mail. Quem publica o grupo é seu administrador no Firestore; somente essa conta pode atualizar dados e gerenciar convites.
-5. Compartilhe o endereço do site com o convidado. O sistema **não envia e-mail de convite**: os convites ficam disponíveis dentro do aplicativo, inclusive para contas criadas posteriormente. A confirmação de e-mail é enviada pelo Firebase quando a pessoa clica em **Enviar confirmação**.
-6. O convidado entra com o e-mail informado, confirma o endereço, clica em **Já confirmei meu e-mail** e aceita o convite. Google normalmente já fornece e-mail verificado. O aceite preserva o ID do participante e todo seu histórico no grupo.
+4. Em **Pessoas e grupos**, crie um grupo com seu nome. Em **Convites e acesso ao grupo**, escolha o grupo, informe o e-mail e clique em **Consultar e-mail**. Se houver conta, confira o nome retornado; caso contrário, informe um nome provisório. Você também pode vincular a um participante existente para preservar o histórico. Quem publica o grupo é seu administrador no Firestore; somente essa conta pode atualizar dados e gerenciar convites.
+5. Compartilhe o endereço do site com o convidado. O sistema **não envia e-mail de convite**: os convites ficam disponíveis dentro do aplicativo, inclusive para contas criadas posteriormente. O acesso é feito pela conta Google com e-mail verificado.
+6. O convidado entra com a conta Google do e-mail informado e aceita o convite dentro do aplicativo. O nome provisório permanece no grupo, independentemente do nome no perfil pessoal. O aceite preserva o ID do participante e todo seu histórico no grupo.
 
-A área de acesso está separada em **Convidar e gerenciar** (formulário, convites enviados e atualização dos dados), **Convites recebidos** (confirmação do e-mail e aceite) e **Grupos compartilhados** (consulta de despesas e repasses). Os contadores indicam convites pendentes e grupos recebidos; após o aceite, a consulta do grupo abre automaticamente.
+A área de acesso está separada em **Convidar e gerenciar** (formulário, convites enviados e atualização dos dados), **Convites recebidos** (login Google e aceite) e **Grupos compartilhados** (consulta de despesas e repasses). Os contadores indicam convites pendentes e grupos recebidos; após o aceite, a consulta do grupo abre automaticamente.
 
 ### Comportamento e limites
 
@@ -127,7 +127,7 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 ```
 
-4. Em Authentication → Sign-in method, habilite E-mail/senha e, se desejar, Google. O provedor Google pede um e-mail de suporte.
+4. Em Authentication → Sign-in method, habilite Google e informe o e-mail de suporte. Desative E-mail/senha para impedir novos acessos por senha. Não exclua contas antigas: a migração para Google deve preservar o UID e os dados da conta.
 5. Em Authentication → Settings → Authorized domains, autorize os domínios exatos usados pelo aplicativo. Para desenvolvimento, confira `localhost` e/ou `127.0.0.1`. Projetos novos não devem presumir que localhost já esteja autorizado.
 6. Reinicie `npm run dev` após mudar variáveis de ambiente.
 7. Teste o cadastro e login com sua própria conta pelo navegador.
@@ -137,6 +137,26 @@ Os campos Web de configuração são utilizados pelo SDK cliente; nunca adicione
 [Configuração Web oficial](https://firebase.google.com/docs/web/setup) · [FAQ de autenticação e domínios autorizados](https://firebase.google.com/docs/auth/faq-and-troubleshooting).
 
 ## Vercel
+
+### Busca de convidados por e-mail no servidor
+
+A função `api/group-invite-lookup.js` usa Firebase Admin somente no servidor. A requisição exige token Firebase de uma sessão Google verificada e um grupo ativo administrado pelo solicitante. A resposta contém somente `found` e `name`; não inclui UID, telefone, salário ou dados do perfil. O nome vem do perfil salvo no site, com fallback para o nome do Google. Não há listagem pública de contas. Consultas têm limite de 30 por conta em uma janela de 10 minutos.
+
+Configure no ambiente de servidor da Vercel:
+
+```dotenv
+FIREBASE_PROJECT_ID=seu-projeto
+FIREBASE_CLIENT_EMAIL=email-da-conta-de-servico
+FIREBASE_PRIVATE_KEY=chave-privada-da-conta-de-servico
+```
+
+Use uma conta de serviço do mesmo projeto Firebase, com acesso ao Authentication e ao Firestore. Essas variáveis nunca devem receber prefixo `VITE_`, entrar no Git ou ser enviadas pelo navegador. A chave aceita quebras de linha reais ou sequências literais `\n`. Consulte a [configuração oficial do Firebase Admin](https://firebase.google.com/docs/admin/setup).
+
+O projeto Vite publica a rota pelo diretório `api`, conforme a [integração oficial da Vercel](https://vercel.com/docs/frameworks/frontend/vite). `npm run dev` também atende essa rota por um middleware local; configure os mesmos valores em `.env.local`. `npm run preview` serve somente os arquivos estáticos e não executa a API. Se faltarem credenciais, a consulta apresenta mensagem de servidor não configurado, sem simular que o convidado não tem conta.
+
+Para ativar a versão: habilite Google, configure as três variáveis no servidor, publique `firestore.rules` e gere um novo deploy. Sessões antigas por senha deixam de acessar o aplicativo e o Firestore; a pessoa precisa entrar com Google. O backend valida tokens com o [Firebase Admin](https://firebase.google.com/docs/auth/admin/verify-id-tokens). Não apague usuários existentes para fazer essa transição.
+
+O nome no grupo e o nome do perfil são independentes. Um convite para “Bia” pode ser aceito por uma conta com perfil “Beatriz Silva”; o participante mantém o ID, o nome “Bia” e as despesas do grupo. O aceite não substitui o perfil pessoal e não concede acesso antes da confirmação.
 
 - Framework preset: Vite.
 - Instalação: `npm ci`.

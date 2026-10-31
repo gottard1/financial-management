@@ -1,8 +1,15 @@
 import { publicGroupStats } from './groupOverview.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeInviteEmail, projectSharedGroup } from './groupSharing.js';
+import { normalizeInviteEmail, projectSharedGroup, invitableGroupMembers } from './groupSharing.js';
 import { calculateWorkspace, migrateData } from '../budget/workspaceCalculations.js';
+
+test('invite choices exclude the administrator, removed participants and archived groups', () => {
+  const group = { memberIds: ['a', 'b', 'c'], adminPersonId: 'a', removedMemberIds: ['c'] };
+  assert.deepEqual(invitableGroupMembers(group), ['b']);
+  assert.deepEqual(invitableGroupMembers({ ...group, deleted: true }), []);
+  assert.deepEqual(invitableGroupMembers(undefined), []);
+});
 
 test('normalizes invite email and rejects malformed addresses', () => {
   assert.equal(normalizeInviteEmail('  Ana@Example.COM '), 'ana@example.com');

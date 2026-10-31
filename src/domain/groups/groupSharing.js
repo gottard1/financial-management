@@ -10,6 +10,10 @@ export function normalizeInviteEmail(value) {
   return email;
 }
 
+export function invitableGroupMembers(group) {
+  return activeGroupMembers(group).filter((id) => id !== group?.adminPersonId);
+}
+
 // An explicit allowlist prevents private incomes, personal expenses and receipt metadata leaking.
 export function projectSharedGroup(data, groupId) {
   data = { ...data, settlements: (data.settlements || []).filter((item) => !item.sharedReceipt) };
