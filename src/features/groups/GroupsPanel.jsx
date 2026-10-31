@@ -16,6 +16,8 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
   const [purgeTarget, setPurgeTarget] = useState(null);
   const [purgeError, setPurgeError] = useState('');
   const [personName, setPersonName] = useState('');
+  const [editingPersonId, setEditingPersonId] = useState('');
+  const [adminPersonId, setAdminPersonId] = useState('');
   const [groupName, setGroupName] = useState('');
   const [memberIds, setMemberIds] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -33,21 +35,31 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
       setPersonError('Informe um nome de até 60 caracteres.');
       return;
     }
-    if (people.some((person) => normalize(person.name) === normalize(name))) {
+    if (
+      people.some(
+        (person) => person.id !== editingPersonId && normalize(person.name) === normalize(name),
+      )
+    ) {
       setPersonError('Já existe uma pessoa com este nome. Use um nome diferente.');
       return;
     }
     setData((current) => ({
       ...current,
-      people: [...current.people, { id: crypto.randomUUID(), name }],
+      people: editingPersonId
+        ? current.people.map((person) =>
+            person.id === editingPersonId ? { ...person, name } : person,
+          )
+        : [...current.people, { id: crypto.randomUUID(), name }],
     }));
     setPersonName('');
+    setEditingPersonId('');
     setPersonError('');
     notify?.('Pessoa cadastrada. Você já pode incluí-la em um grupo e definir sua renda.');
   }
   function resetGroup() {
     setGroupName('');
     setMemberIds([]);
+    setAdminPersonId('');
     setEditingId(null);
     setGroupError('');
   }
@@ -78,6 +90,14 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
       return;
     }
     const id = editingId || crypto.randomUUID();
+    if (members.some((id) => people.find((person) => person.id === id)?.name === 'Você')) {
+      setGroupError('Edite o cadastro “Você” e informe o nome da pessoa antes de salvar o grupo.');
+      return;
+    }
+    if (!members.includes(adminPersonId)) {
+      setGroupError('Escolha quem é você entre os participantes do grupo.');
+      return;
+    }
     setData((current) => ({
       ...current,
       groups: editingId
@@ -86,6 +106,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
               ? {
                   ...group,
                   name,
+                  adminPersonId,
                   memberIds: [...new Set([...group.memberIds, ...members])],
                   removedMemberIds: (group.removedMemberIds || []).filter(
                     (id) => !members.includes(id),
@@ -93,7 +114,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
                 }
               : group,
           )
-        : [...current.groups, { id, name, memberIds: members }],
+        : [...current.groups, { id, name, memberIds: members, adminPersonId }],
     }));
     notify?.(
       editingId
@@ -106,6 +127,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
     setEditingId(group.id);
     setGroupName(group.name);
     setMemberIds(activeGroupMembers(group));
+    setAdminPersonId(group.adminPersonId || '');
     setGroupError('');
   }
   function toggleMember(id) {
@@ -223,7 +245,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
       <div className="two-col groups-forms">
         <section className="panel">
           <p className="eyebrow">QUEM PARTICIPA DOS PLANOS</p>
-          <h2>Cadastrar uma pessoa</h2>
+          <h2>{editingPersonId ? 'Editar nome da pessoa' : 'Cadastrar uma pessoa'}</h2>
           <p className="muted">
             Cada pessoa tem seu espaço individual e pode participar de vários grupos.
           </p>
@@ -247,7 +269,21 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
               </p>
             )}
             <div className="form-actions">
-              <button className="button primary">Adicionar pessoa</button>
+              <button className="button primary">
+                {editingPersonId ? 'Salvar nome' : 'Adicionar pessoa'}
+              </button>
+              {editingPersonId && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => {
+                    setEditingPersonId('');
+                    setPersonName('');
+                  }}
+                >
+                  Cancelar
+                </button>
+              )}
             </div>
           </form>
         </section>
@@ -305,6 +341,27 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
                 <p className="hint">Cadastre as pessoas antes de criar um grupo.</p>
               )}
             </fieldset>
+            <label className="field">
+              Quem é você neste grupo?
+              <select
+                required
+                value={adminPersonId}
+                onChange={(event) => setAdminPersonId(event.target.value)}
+              >
+                <option value="">Selecione seu nome</option>
+                {people
+                  .filter((person) => memberIds.includes(person.id))
+                  .map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name}
+                    </option>
+                  ))}
+              </select>
+              <small>
+                Vincula sua conta ao seu nome para confirmar somente os recebimentos destinados a
+                você.
+              </small>
+            </label>
             {editingId && (
               <p className="hint">
                 Você pode mudar o nome, adicionar ou reativar participantes. Para remover alguém,
@@ -350,6 +407,18 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
                   {person.name.slice(0, 1).toLocaleUpperCase('pt-BR')}
                 </span>
                 <strong>{person.name}</strong>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setEditingPersonId(person.id);
+                    setPersonName(person.name === 'Você' ? '' : person.name);
+                    setPersonError('');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >
+                  Editar nome
+                </button>
               </li>
             ))}
           </ul>

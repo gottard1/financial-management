@@ -70,12 +70,13 @@ export function ExpenseList({
   incomes,
   edit,
   setData,
+  readOnly = false,
 }) {
   const shared = mode === 'group';
   const items = visible.map((expense) => {
     let shares = null;
     try {
-      shares = splitExpense(expense, incomes, memberIds);
+      shares = readOnly ? expense.shares : splitExpense(expense, incomes, memberIds);
     } catch {}
     return {
       expense,
@@ -109,14 +110,16 @@ export function ExpenseList({
             <span className="pill">{expenses.length}</span>
           </h2>
         </div>
-        <div className="actions">
-          <button type="button" className="button secondary" onClick={copyFixed}>
-            Trazer recorrentes do mês anterior
-          </button>
-          <button type="button" className="button primary" onClick={newExpense}>
-            + Nova despesa
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="actions">
+            <button type="button" className="button secondary" onClick={copyFixed}>
+              Trazer recorrentes do mês anterior
+            </button>
+            <button type="button" className="button primary" onClick={newExpense}>
+              + Nova despesa
+            </button>
+          </div>
+        )}
       </div>
       {!shared && (
         <p className="muted">
@@ -148,11 +151,11 @@ export function ExpenseList({
             <button type="button" className="button secondary" onClick={() => setFilter('all')}>
               Ver todas as despesas
             </button>
-          ) : (
+          ) : !readOnly ? (
             <button type="button" className="button primary" onClick={newExpense}>
               Adicionar despesa
             </button>
-          )}
+          ) : null}
         </div>
       ) : (
         <>
@@ -165,7 +168,7 @@ export function ExpenseList({
                   {shared && <th>Divisão entre participantes</th>}
                   <th>Quem pagou</th>
                   <th>Status</th>
-                  <th>Ações</th>
+                  {!readOnly && <th>Ações</th>}
                 </tr>
               </thead>
               <tbody>
@@ -189,13 +192,15 @@ export function ExpenseList({
                     <td>
                       <ExpenseStatus status={item.expense.status} />
                     </td>
-                    <td>
-                      <ExpenseActions
-                        expense={item.expense}
-                        onEdit={edit}
-                        onDelete={deleteExpense}
-                      />
-                    </td>
+                    {!readOnly && (
+                      <td>
+                        <ExpenseActions
+                          expense={item.expense}
+                          onEdit={edit}
+                          onDelete={deleteExpense}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -229,12 +234,14 @@ export function ExpenseList({
                     'Pagamento ainda não registrado.'
                   )}
                 </p>
-                <ExpenseActions
-                  expense={item.expense}
-                  onEdit={edit}
-                  onDelete={deleteExpense}
-                  mobile
-                />
+                {!readOnly && (
+                  <ExpenseActions
+                    expense={item.expense}
+                    onEdit={edit}
+                    onDelete={deleteExpense}
+                    mobile
+                  />
+                )}
               </li>
             ))}
           </ul>

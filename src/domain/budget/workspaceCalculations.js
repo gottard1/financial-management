@@ -270,6 +270,8 @@ export function migrateData(input) {
       group.memberIds.some((id) => !personIds.has(id))
     )
       throw new Error('Integrantes do grupo inválidos no backup.');
+    if (group.adminPersonId != null && !group.memberIds.includes(group.adminPersonId))
+      throw new Error('A pessoa vinculada ao administrador deve pertencer ao grupo.');
     if (
       group.removedMemberIds !== undefined &&
       (!Array.isArray(group.removedMemberIds) ||

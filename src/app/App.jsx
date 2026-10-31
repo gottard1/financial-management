@@ -1,4 +1,8 @@
+import { useOwnedGroupSettlements } from '../hooks/useOwnedGroupSettlements.js';
+import { mergeSharedSettlements } from '../domain/settlements/sharedSettlements.js';
+import { saveSharedSettlement } from '../infrastructure/firebase/sharedSettlementRepository.js';
 import { useFinanceData } from '../hooks/useFinanceData.js';
+import { exportFinanceData } from '../infrastructure/storage/localFinanceRepository.js';
 import { useSharedMemberships } from '../hooks/useSharedMemberships.js';
 import { AppSidebar } from '../components/layout/AppSidebar.jsx';
 import { WorkspaceSelector } from '../components/layout/WorkspaceSelector.jsx';
@@ -11,7 +15,7 @@ import {
   recurringCandidates,
   copyRecurringExpenses,
 } from '../domain/expenses/recurringExpenses.js';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { parseMoney, splitExpense } from '../domain/expenses/expenseCalculations.js';
 import { calculateWorkspace } from '../domain/budget/workspaceCalculations.js';
 import { sumRestrictedBenefits } from '../domain/income/calculateCompensation.js';
@@ -54,7 +58,7 @@ function FinanceApp({ storageNamespace }) {
   const { user, localMode, signOut } = useAuth();
   const { groups: sharedGroups, error: sharingError } = useSharedMemberships(user, localMode);
   const {
-    data,
+    data: privateData,
     setData,
     error: storageError,
     blocked,
@@ -66,6 +70,21 @@ function FinanceApp({ storageNamespace }) {
     useCloudVersion,
     commitData,
   } = useFinanceData(storageNamespace);
+  const {
+    groups: ownedSharedGroups,
+    error: settlementSyncError,
+    ready: settlementsReady,
+  } = useOwnedGroupSettlements(user, localMode);
+  const data = useMemo(
+    () => mergeSharedSettlements(privateData, ownedSharedGroups),
+    [privateData, ownedSharedGroups],
+  );
+  const receiptsLoading = Boolean(
+    user &&
+    !localMode &&
+    import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true' &&
+    !settlementsReady,
+  );
   const [month, setMonth] = useState(monthNow),
     [tab, setTab] = useState('overview'),
     [mode, setMode] = useState('individual'),
@@ -80,6 +99,7 @@ function FinanceApp({ storageNamespace }) {
   const [recurringDraft, setRecurringDraft] = useState(null);
   const group =
     data.groups.find((item) => item.id === groupId) || data.groups.find((item) => !item.deleted);
+  const ownedSharedGroup = ownedSharedGroups.find((item) => item.localId === group?.id);
   const archivedGroup = mode === 'group' && group?.deleted;
   const person = data.people.some((item) => item.id === personId) ? personId : data.people[0].id;
   const selectedGroupId = sharedGroup?.id || group?.id || sharedGroups[0]?.id || '';
@@ -189,7 +209,9 @@ function FinanceApp({ storageNamespace }) {
     });
   }
   function exportData() {
-    const url = URL.createObjectURL(new Blob([exportJson()], { type: 'application/json' }));
+    const url = URL.createObjectURL(
+      new Blob([blocked ? exportJson() : exportFinanceData(data)], { type: 'application/json' }),
+    );
     const a = document.createElement('a');
     a.href = url;
     a.download = `financas-${month}.json`;
@@ -382,9 +404,9 @@ function FinanceApp({ storageNamespace }) {
               {error || storageError}
             </p>
           )}
-          {sharingError && (
+          {(sharingError || settlementSyncError) && (
             <p role="alert" className="notice error">
-              {sharingError}
+              {sharingError || settlementSyncError}
             </p>
           )}
           {blocked && (
@@ -396,7 +418,7 @@ function FinanceApp({ storageNamespace }) {
           <div hidden={tab !== 'groups'}>
             {import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true' ? (
               <React.Suspense fallback={<p role="status">Carregando compartilhamento…</p>}>
-                <GroupSharingPanel data={data} notify={setNotice} syncBlocked={blocked} />
+                <GroupSharingPanel data={privateData} notify={setNotice} syncBlocked={blocked} />
               </React.Suspense>
             ) : (
               <section className="panel">
@@ -474,13 +496,36 @@ function FinanceApp({ storageNamespace }) {
                   notify={setNotice}
                 />
               )}
-              {tab === 'settlements' && stats && mode === 'group' && (
-                <SettlementsPanel
-                  key={scope + month}
-                  {...{ data, setData, scope, month, stats, storageNamespace }}
-                  notify={setNotice}
-                />
-              )}
+              {tab === 'settlements' &&
+                stats &&
+                mode === 'group' &&
+                (receiptsLoading ? (
+                  <p role="status">Carregando recebimentos compartilhados…</p>
+                ) : (
+                  <SettlementsPanel
+                    key={scope + month}
+                    {...{ data, setData, scope, month, stats, storageNamespace }}
+                    notify={setNotice}
+                    receiverId={group?.adminPersonId}
+                    receiverUid={user?.uid}
+                    onSharedReceive={
+                      ownedSharedGroup
+                        ? (record) =>
+                            saveSharedSettlement(ownedSharedGroup.id, {
+                              month,
+                              transfer: { from: record.from, to: record.to, amount: record.amount },
+                              id: record.id,
+                              date: record.date,
+                            })
+                        : undefined
+                    }
+                    onSharedUndo={
+                      ownedSharedGroup
+                        ? (voidId) => saveSharedSettlement(ownedSharedGroup.id, { month, voidId })
+                        : undefined
+                    }
+                  />
+                ))}
               {tab === 'settlements' && mode !== 'group' && (
                 <section className="panel empty">
                   <h2>Selecione um grupo</h2>
@@ -491,7 +536,28 @@ function FinanceApp({ storageNamespace }) {
                 </section>
               )}
               {tab === 'overview' && stats && (
-                <OverviewPanel {...{ stats, mode, plan, data, go, scope }} />
+                <OverviewPanel
+                  {...{ stats, mode, plan, data, go, scope, month }}
+                  commitData={receiptsLoading ? undefined : commitData}
+                  receiverId={group?.adminPersonId}
+                  receiverUid={user?.uid}
+                  onSharedReceive={
+                    ownedSharedGroup
+                      ? (transfer, id) =>
+                          saveSharedSettlement(ownedSharedGroup.id, {
+                            month,
+                            transfer,
+                            id,
+                            date: new Date().toLocaleDateString('sv-SE'),
+                          })
+                      : undefined
+                  }
+                  onSharedUndo={
+                    ownedSharedGroup
+                      ? (voidId) => saveSharedSettlement(ownedSharedGroup.id, { month, voidId })
+                      : undefined
+                  }
+                />
               )}
               {(tab === 'expenses' || tab === 'overview') && (
                 <ExpenseList

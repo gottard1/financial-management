@@ -30,7 +30,7 @@ export async function purgeSharedGroupHistory(database, adminUid, groupId) {
       updatedAt: serverTimestamp(),
     });
   });
-  const [invites, memberships] = await Promise.all([
+  const [invites, memberships, settlementMonths] = await Promise.all([
     getDocs(
       query(
         collection(database, 'groupInvites'),
@@ -39,8 +39,11 @@ export async function purgeSharedGroupHistory(database, adminUid, groupId) {
       ),
     ),
     getDocs(query(collection(database, 'groupMemberships'), where('groupId', '==', groupId))),
+    getDocs(collection(ref, 'settlementMonths')),
   ]);
-  const references = [...memberships.docs, ...invites.docs].map((item) => item.ref);
+  const references = [...memberships.docs, ...invites.docs, ...settlementMonths.docs].map(
+    (item) => item.ref,
+  );
   for (let offset = 0; offset < references.length; offset += 400) {
     const batch = writeBatch(database);
     references.slice(offset, offset + 400).forEach((item) => batch.delete(item));

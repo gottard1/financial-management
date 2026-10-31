@@ -54,14 +54,26 @@ A área de acesso está separada em **Convidar e gerenciar** (formulário, convi
 ### Comportamento e limites
 
 - O e-mail é opcional para participantes; sem convite aceito não há acesso compartilhado. O administrador pode alterar o e-mail ou cancelar um convite pendente. O participante vinculado não é trocado por outro cadastro; o administrador pode remover a pessoa do grupo para revogar esse acesso.
-- O participante consulta despesas, sua parte, saldo após repasses e histórico de repasses por competência. Os lançamentos são gerenciados pelo administrador. Os grupos recebidos aparecem também no seletor do espaço **Grupo**. A Visão geral mostra os mesmos totais mensais, orçamento, benefícios agregados, participantes e acertos do administrador, em modo de consulta.
-- O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas do grupo com rateio calculado e repasses. Inclui resumos mensais com renda total do grupo, benefícios agregados, aportes, orçamento e acertos; não inclui rendas individualizadas, perfis de renda, despesas individuais, e-mails dos demais convidados, notas ou arquivos/metadados de comprovantes.
+- O participante consulta despesas, sua parte, saldo após repasses e histórico de repasses por competência. Os lançamentos são gerenciados pelo administrador. Os grupos recebidos aparecem também no seletor do espaço **Grupo**. A Visão geral mostra os mesmos totais das contas, orçamento, reservas, divisão por participante e acertos do administrador. Salários, renda total, benefícios e disponível pessoal ficam fora da visão do grupo e da projeção compartilhada.
+- O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas do grupo com rateio calculado e repasses. Inclui resumos mensais das contas, aportes, orçamento e acertos; não inclui rendas individualizadas, perfis de renda, despesas individuais, e-mails dos demais convidados, notas ou arquivos/metadados de comprovantes.
 - As alterações do administrador são publicadas com atraso de 700 ms enquanto o aplicativo está aberto. Falhas geram aviso e podem ser retomadas com **Atualizar dados compartilhados**. O primeiro convite também publica o histórico existente.
 - O estado completo do administrador é sincronizado pela área privada da própria conta. A projeção compartilhada permanece separada e não expõe esse estado aos convidados. Revisões transacionais evitam sobrescrever uma publicação concorrente sem aviso.
 - Aceite e associação são gravados atomicamente. As regras exigem e-mail verificado, convite pendente para aquele endereço e correspondência entre grupo, participante e UID.
 - O snapshot é um documento Firestore, sujeito ao limite de tamanho por documento. Não há upload de arquivos nesta etapa.
 
-Para grupos publicados antes da integração com a Visão geral, o administrador deve usar **Atualizar dados compartilhados** uma vez após atualizar o aplicativo. Esta integração não exige novas regras nem índices além dos já previstos neste projeto.
+Para grupos publicados antes da integração com a Visão geral, o administrador deve usar **Atualizar dados compartilhados** uma vez após atualizar o aplicativo. A confirmação de recebimentos pelos participantes exige publicar as regras atualizadas de firestore.rules; não exige novos índices.
+
+### Recebimentos confirmados pelo próprio participante
+
+Em **Pessoas e grupos**, use **Editar nome** para substituir “Você” pelo nome real. Ao criar ou editar o grupo, selecione **Quem é você neste grupo?**. Esse vínculo identifica o recebedor na conta do administrador; os convidados continuam vinculados pelo convite aceito.
+
+A Visão geral oferece **✓ Já recebi** e **Recebi uma parte** somente para dívidas destinadas à pessoa vinculada à conta. A confirmação usa a data de hoje e a competência selecionada, atualiza o saldo para todos e aparece em **Recebimentos do mês**. Apenas a conta que confirmou pode desfazer seu recebimento. O estorno preserva o histórico. Salários, benefícios e totais derivados de renda não são enviados no snapshot do grupo.
+
+Os registros ficam em `sharedGroups/{groupId}/settlementMonths/{month}`, separados da projeção publicada pelo administrador. Transações leem a projeção e o histórico atual para evitar duplicidade e exceder a dívida. As regras verificam recebedor, vínculo ativo, revisão, saldo e alterações nos totais. Confirmações funcionam mesmo com o administrador offline; as despesas refletem a última publicação dele. Republicar não duplica recebimentos. A exclusão lógica preserva o histórico para o administrador e bloqueia convidados; apagar definitivamente também remove os documentos de recebimentos.
+
+Para ativar: publique as regras completas, gere um novo deploy do site, edite o grupo para escolher seu nome e clique em **Atualizar dados compartilhados**. Essa republicação também substitui snapshots antigos que continham renda agregada. Os dados privados são preservados.
+
+O rateio proporcional divulga a proporção das cotas e pode permitir inferências de renda quando alguém conhece seu próprio salário. Para evitar essa inferência, use partes iguais ou valores combinados.
 
 ### Excluir grupos
 

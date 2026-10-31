@@ -15,11 +15,13 @@ function today() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
-function initialForm(stats, members) {
-  const suggestion = stats.transfers?.[0];
+function initialForm(stats, members, receiverId) {
+  const suggestion = receiverId
+    ? stats.transfers?.find((item) => item.to === receiverId)
+    : stats.transfers?.[0];
   return {
     from: suggestion?.from ?? members[0] ?? '',
-    to: suggestion?.to ?? members[1] ?? '',
+    to: receiverId || suggestion?.to || members[1] || '',
     amount: suggestion ? amountText(suggestion.amount) : '',
     date: today(),
     note: '',
@@ -34,11 +36,17 @@ export function SettlementsPanel({
   stats,
   notify,
   storageNamespace = 'local',
+  receiverId,
+  receiverUid,
+  onSharedReceive,
+  onSharedUndo,
 }) {
   const group = data.groups.find((item) => `group:${item.id}` === scope);
   const memberIds = group?.memberIds ?? [];
   const names = Object.fromEntries(data.people.map((person) => [person.id, person.name]));
-  const [form, setForm] = useState(() => initialForm(stats, memberIds));
+  const [form, setForm] = useState(() =>
+    initialForm(stats, memberIds, onSharedReceive ? receiverId : null),
+  );
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -51,7 +59,7 @@ export function SettlementsPanel({
     previewUrl = useRef('');
   const mounted = useRef(true);
   const current = useRef(null);
-  current.current = { stats, memberIds, scope, month, storageNamespace };
+  current.current = { stats, memberIds, scope, month, storageNamespace, receiverId };
   const contextKey = `${storageNamespace}|${scope}|${month}`;
   function revokePreview() {
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
@@ -59,14 +67,16 @@ export function SettlementsPanel({
   }
   useEffect(() => {
     const context = current.current;
-    setForm(initialForm(context.stats, context.memberIds));
+    setForm(
+      initialForm(context.stats, context.memberIds, onSharedReceive ? context.receiverId : null),
+    );
     setFile(null);
     setError('');
     setVoidId('');
     setPreview(null);
     revokePreview();
     if (fileInput.current) fileInput.current.value = '';
-  }, [scope, month, storageNamespace]);
+  }, [scope, month, storageNamespace, receiverId, Boolean(onSharedReceive)]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -128,6 +138,19 @@ export function SettlementsPanel({
         status: 'confirmed',
       };
       validateNewSettlement(record, stats, memberIds);
+      if (onSharedReceive) {
+        if (record.to !== receiverId)
+          throw new Error('Você só pode confirmar o dinheiro que recebeu.');
+        if (file || record.note)
+          throw new Error(
+            'O recebimento compartilhado aceita valor e data. Registre-o sem anexo ou observação.',
+          );
+        await onSharedReceive(record);
+        committed = true;
+        setForm((previous) => ({ ...previous, amount: '', note: '' }));
+        notify('Recebimento confirmado e compartilhado com o grupo.');
+        return;
+      }
       if (file) receipt = await saveReceipt(file, namespace);
       if (!stillCurrent(key))
         throw new Error(
@@ -162,8 +185,13 @@ export function SettlementsPanel({
       setBusy(false);
     }
   }
-  function voidRecord(record) {
+  async function voidRecord(record) {
     try {
+      if (record.sharedReceipt) {
+        await onSharedUndo(record.id);
+        setVoidId('');
+        return;
+      }
       setData((previous) => ({
         ...previous,
         settlements: (previous.settlements ?? []).map((item) =>
@@ -235,7 +263,7 @@ export function SettlementsPanel({
                 <button
                   className="button"
                   type="button"
-                  disabled={busy}
+                  disabled={busy || (Boolean(onSharedReceive) && transfer.to !== receiverId)}
                   onClick={() => suggest(transfer)}
                 >
                   Registrar recebimento
@@ -253,6 +281,12 @@ export function SettlementsPanel({
           Registre somente depois de o dinheiro ter sido recebido. A sugestão preenche o formulário
           e você confirma abaixo.
         </p>
+        {onSharedReceive && (
+          <p className="hint">
+            Confirme somente recebimentos destinados ao seu nome. As confirmações compartilhadas
+            registram valor e data; anexos e observações não são compartilhados.
+          </p>
+        )}
         <form onSubmit={submit}>
           <div className="form-grid">
             <label className="field">
@@ -276,6 +310,7 @@ export function SettlementsPanel({
               Quem recebeu?
               <select
                 required
+                disabled={Boolean(onSharedReceive)}
                 value={form.to}
                 onChange={(event) =>
                   setForm((previous) => ({ ...previous, to: event.target.value }))
@@ -322,6 +357,7 @@ export function SettlementsPanel({
             <label className="field">
               Observação (opcional)
               <input
+                disabled={Boolean(onSharedReceive)}
                 maxLength={240}
                 value={form.note}
                 placeholder="Ex.: PIX referente às contas do mês"
@@ -337,7 +373,7 @@ export function SettlementsPanel({
                 type="file"
                 accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                 onChange={chooseFile}
-                disabled={busy}
+                disabled={busy || Boolean(onSharedReceive)}
               />
               <small>
                 JPG, PNG, WEBP ou PDF de até 5 MB.{' '}
@@ -392,16 +428,18 @@ export function SettlementsPanel({
                     {viewingId === record.id ? 'Preparando arquivo…' : 'Visualizar comprovante'}
                   </button>
                 )}
-                {record.status === 'confirmed' && voidId !== record.id && (
-                  <button
-                    type="button"
-                    className="button"
-                    disabled={busy}
-                    onClick={() => setVoidId(record.id)}
-                  >
-                    Estornar registro
-                  </button>
-                )}
+                {record.status === 'confirmed' &&
+                  (!record.sharedReceipt || record.receiverUid === receiverUid) &&
+                  voidId !== record.id && (
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={busy}
+                      onClick={() => setVoidId(record.id)}
+                    >
+                      Estornar registro
+                    </button>
+                  )}
               </div>
               {record.receipt && <small>Comprovante: {record.receipt.name}</small>}
               {preview?.recordId === record.id && (

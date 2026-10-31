@@ -8,6 +8,8 @@ import {
   purgeSharedGroupHistory,
 } from '../../src/infrastructure/firebase/groupDeletion.js';
 import { purgeGroupHistoryBatch } from '../../src/domain/groups/groupMembers.js';
+import { nextSettlementLedger } from '../../src/domain/settlements/sharedSettlements.js';
+import { writeSharedSettlement } from '../../src/infrastructure/firebase/sharedSettlementStore.js';
 import { migrateData, defaultIncomeConfig } from '../../src/domain/budget/workspaceCalculations.js';
 import {
   initializeTestEnvironment,
@@ -556,5 +558,144 @@ test(
     await assertFails(
       updateDoc(doc(admin, 'sharedGroups', groupId), { revision: 2, updatedAt: serverTimestamp() }),
     );
+  },
+);
+
+test(
+  'only the receiver can confirm or undo shared receipts; stale writes, overpayments and revoked accounts are denied',
+  { skip: !enabled },
+  async () => {
+    const id = 'receipt-owner_home';
+    const owner = context('receipt-owner'),
+      member = context('receipt-member'),
+      stranger = context('receipt-outsider');
+    const snapshot = {
+      id: 'home',
+      name: 'Casa',
+      adminPersonId: 'a',
+      activeMemberIds: ['a', 'b'],
+      people: [
+        { id: 'a', name: 'Ana' },
+        { id: 'b', name: 'Bia' },
+      ],
+      expenses: [],
+      settlements: [],
+      emptyOverview: { stats: { balances: { a: 0, b: 0 } } },
+      overview: {
+        '2026-10': {
+          stats: {
+            total: 10000,
+            balances: { a: -5000, b: 5000 },
+            transfers: [{ from: 'a', to: 'b', amount: 5000 }],
+          },
+        },
+        '2026-11': {
+          stats: {
+            total: 10000,
+            balances: { a: 5000, b: -5000 },
+            transfers: [{ from: 'b', to: 'a', amount: 5000 }],
+          },
+        },
+      },
+    };
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, 'sharedGroups', id), {
+        adminUid: 'receipt-owner',
+        snapshot,
+        revision: 1,
+      });
+      await setDoc(doc(db, 'groupMemberships', 'receipt-member_' + id), {
+        uid: 'receipt-member',
+        groupId: id,
+        personId: 'b',
+        inviteId: id + '_b',
+      });
+      await setDoc(doc(db, 'groupInvites', id + '_b'), {
+        status: 'accepted',
+        acceptedUid: 'receipt-member',
+      });
+    });
+    const options = {
+      month: '2026-10',
+      transfer: { from: 'a', to: 'b', amount: 2000 },
+      uid: 'receipt-member',
+      id: 'receipt-1',
+      date: '2026-11-01',
+    };
+    const ledger = nextSettlementLedger(snapshot, null, options);
+    const ref = (db) => doc(db, 'sharedGroups', id, 'settlementMonths', '2026-10');
+    const payload = (next) => ({ ...next, baseRevision: 1, updatedAt: serverTimestamp() });
+    await assertSucceeds(getDoc(ref(member)));
+    await assertFails(getDoc(ref(stranger)));
+    await assertFails(setDoc(ref(owner), payload(ledger)));
+    await assertFails(setDoc(ref(stranger), payload(ledger)));
+    await assertFails(
+      setDoc(ref(member), payload({ ...ledger, adjustments: { a: 2001, b: -2001 } })),
+    );
+    await assertSucceeds(writeSharedSettlement(member, 'receipt-member', id, options));
+    await assertFails(setDoc(ref(member), payload(ledger)));
+    const excessive = {
+      ...options,
+      id: 'overpayment',
+      transfer: { ...options.transfer, amount: 4000 },
+    };
+    const forged = {
+      ...ledger,
+      revision: 2,
+      records: [...ledger.records, { ...ledger.records[0], id: 'overpayment', amount: 4000 }],
+      ids: { ...ledger.ids, overpayment: true },
+      adjustments: { a: 6000, b: -6000 },
+    };
+    await assertFails(setDoc(ref(member), payload(forged)));
+    await assert.rejects(() => writeSharedSettlement(member, 'receipt-member', id, excessive));
+    const undone = nextSettlementLedger(snapshot, ledger, { ...options, voidId: 'receipt-1' });
+    await assertFails(setDoc(ref(owner), payload(undone)));
+    await assertSucceeds(
+      writeSharedSettlement(member, 'receipt-member', id, {
+        month: options.month,
+        voidId: 'receipt-1',
+      }),
+    );
+    assert.equal((await getDoc(ref(member))).data().voided['receipt-1'], true);
+    await assert.rejects(() =>
+      writeSharedSettlement(member, 'receipt-member', id, {
+        month: options.month,
+        voidId: 'receipt-1',
+      }),
+    );
+    const concurrent = await Promise.allSettled(
+      ['click-a', 'click-b'].map((receiptId) =>
+        writeSharedSettlement(member, 'receipt-member', id, {
+          ...options,
+          id: receiptId,
+          transfer: { ...options.transfer, amount: 5000 },
+        }),
+      ),
+    );
+    assert.equal(concurrent.filter((result) => result.status === 'fulfilled').length, 1);
+    await assertSucceeds(
+      writeSharedSettlement(owner, 'receipt-owner', id, {
+        ...options,
+        month: '2026-11',
+        id: 'owner-receipt',
+        transfer: { from: 'b', to: 'a', amount: 5000 },
+      }),
+    );
+    await environment.withSecurityRulesDisabled(async (context) =>
+      updateDoc(doc(context.firestore(), 'groupInvites', id + '_b'), { status: 'revoked' }),
+    );
+    await assertFails(getDoc(ref(member)));
+    await assertFails(deleteDoc(ref(owner)));
+    await assertSucceeds(
+      updateDoc(doc(owner, 'sharedGroups', id), {
+        deleted: true,
+        revision: 2,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(getDoc(ref(owner)));
+    await purgeSharedGroupHistory(owner, 'receipt-owner', id);
+    assert.equal((await getDoc(ref(owner))).exists(), false);
   },
 );

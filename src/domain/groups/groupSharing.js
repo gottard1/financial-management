@@ -1,7 +1,7 @@
 import { splitExpense } from '../expenses/expenseCalculations.js';
 import { activeGroupMembers } from './groupMembers.js';
 import { calculateWorkspace } from '../budget/workspaceCalculations.js';
-import { sumRestrictedBenefits } from '../income/calculateCompensation.js';
+import { publicGroupStats } from './groupOverview.js';
 
 export function normalizeInviteEmail(value) {
   const email = value.trim().toLowerCase();
@@ -12,18 +12,22 @@ export function normalizeInviteEmail(value) {
 
 // An explicit allowlist prevents private incomes, personal expenses and receipt metadata leaking.
 export function projectSharedGroup(data, groupId) {
+  data = { ...data, settlements: (data.settlements || []).filter((item) => !item.sharedReceipt) };
   const group = data.groups.find((item) => item.id === groupId);
   if (!group) throw new Error('Grupo não encontrado.');
   return {
     id: group.id,
     name: group.name,
+    adminPersonId: group.adminPersonId || null,
     activeMemberIds: activeGroupMembers(group),
     emptyOverview: {
-      stats: calculateWorkspace(
-        { ...data, expenses: [], settlements: [] },
-        '0000-01',
-        `group:${groupId}`,
-        {},
+      stats: publicGroupStats(
+        calculateWorkspace(
+          { ...data, expenses: [], settlements: [] },
+          '0000-01',
+          `group:${groupId}`,
+          {},
+        ),
       ),
       plan: {},
     },
@@ -50,17 +54,16 @@ export function projectSharedGroup(data, groupId) {
         .map((month) => [
           month,
           {
-            stats: calculateWorkspace(
-              {
-                ...data,
-                settlements: (data.settlements || []).map(({ receipt, ...item }) => item),
-              },
-              month,
-              `group:${groupId}`,
-              data.months[month] || {},
-            ),
-            benefits: sumRestrictedBenefits(
-              group.memberIds.map((id) => data.incomeConfigs?.[month]?.[id]),
+            stats: publicGroupStats(
+              calculateWorkspace(
+                {
+                  ...data,
+                  settlements: (data.settlements || []).map(({ receipt, ...item }) => item),
+                },
+                month,
+                `group:${groupId}`,
+                data.months[month] || {},
+              ),
             ),
             plan: {
               spendingLimit: data.plans?.[`group:${groupId}|${month}`]?.spendingLimit || 0,
@@ -82,6 +85,12 @@ export function projectSharedGroup(data, groupId) {
         date: expense.date,
         status: expense.status,
         payer: expense.payer,
+        category: expense.category || 'Outros',
+        participants: [...expense.participants],
+        split: expense.split,
+        ...(expense.fixed
+          ? { fixed: true, fixedAmountType: expense.fixedAmountType || 'fixed' }
+          : {}),
         shares: splitExpense(expense, data.months[expense.date.slice(0, 7)] || {}, group.memberIds),
         ...(expense.installments ? { installments: { ...expense.installments } } : {}),
       })),

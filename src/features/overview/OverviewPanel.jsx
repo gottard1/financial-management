@@ -1,7 +1,23 @@
 import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
+import { QuickSettlements } from '../settlements/QuickSettlements.jsx';
+import { GroupSettlementHistory } from '../settlements/GroupSettlementHistory.jsx';
 import { Progress } from '../../components/ui/Progress.jsx';
-export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = false }) {
+export function OverviewPanel({
+  stats,
+  mode,
+  plan,
+  data,
+  go,
+  scope,
+  month,
+  commitData,
+  receiverId,
+  onSharedReceive,
+  onSharedUndo,
+  receiverUid,
+  readOnly = false,
+}) {
   const groupMode = mode === 'group';
   const categories = Object.entries(stats.categories || {}).sort((a, b) => b[1] - a[1]);
   const group = data.groups.find((item) => 'group:' + item.id === scope);
@@ -91,19 +107,26 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = f
               Sugestões calculadas sobre contas pagas, descontando os repasses já confirmados.
               Despesas pendentes ficam fora do acerto.
             </p>
-            {transfers.length > 0 && (
-              <ul className="group-transfers">
-                {transfers.map((transfer, index) => (
-                  <li key={transfer.from + '-' + transfer.to + '-' + index}>
-                    <div>
-                      <strong>{nameOf(transfer.from)}</strong>
-                      <span>repassa para {nameOf(transfer.to)}</span>
-                    </div>
-                    <strong className="amount">{money(transfer.amount)}</strong>
-                  </li>
-                ))}
-              </ul>
+            {!readOnly && !receiverId && (
+              <p className="notice">
+                Edite o grupo em Pessoas e grupos e selecione seu nome em “Quem é você neste grupo?”
+                para confirmar seus recebimentos.
+              </p>
             )}
+            <QuickSettlements
+              key={scope + '|' + month}
+              {...{
+                transfers,
+                nameOf,
+                scope,
+                month,
+                commitData,
+                receiverId,
+                onSharedReceive,
+                onSharedUndo,
+              }}
+              readOnly={!onSharedReceive && (readOnly || !commitData)}
+            />
             <section className="overview-section">
               <h3>Participantes · {members.length}</h3>
               <p className="overview-note group-participant-note">
@@ -122,7 +145,7 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = f
                           <dd>{money(stats.shares?.[person.id] || 0)}</dd>
                         </div>
                         <div>
-                          <dt>Já pagou</dt>
+                          <dt>Pagou nas contas</dt>
                           <dd>{money(stats.paidBy?.[person.id] || 0)}</dd>
                         </div>
                         <div>
@@ -143,6 +166,14 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = f
                 })}
               </div>
             </section>
+            <GroupSettlementHistory
+              records={(data.settlements || []).filter(
+                (item) => item.scope === scope && item.referenceMonth === month,
+              )}
+              nameOf={nameOf}
+              canUndo={(record) => Boolean(onSharedUndo) && record.receiverUid === receiverUid}
+              onUndo={onSharedUndo}
+            />
             <p className="overview-note">
               Registre uma devolução quando o dinheiro for recebido para atualizar os saldos. O
               aplicativo não realiza pagamentos.
@@ -154,7 +185,7 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = f
               onClick={() => go('settlements')}
             >
               {readOnly
-                ? 'Repasses gerenciados pelo administrador'
+                ? 'Confirme seus recebimentos nos acertos acima'
                 : 'Registrar ou consultar repasses'}
             </button>
           </article>
@@ -200,7 +231,7 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = f
       <div className="notice">
         <p>
           {groupMode
-            ? 'Este espaço mostra apenas contas e reservas do grupo selecionado. Gastos e reservas individuais ficam nos respectivos espaços e não entram neste resumo.'
+            ? 'Todos os participantes veem as contas, reservas e acertos deste grupo. Salários, benefícios e gastos individuais ficam nos espaços privados de cada conta.'
             : 'O disponível é uma previsão por responsabilidade, após quitar contas e reservar os aportes. Não representa o saldo de uma conta bancária.'}
         </p>
       </div>

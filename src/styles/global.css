@@ -2885,6 +2885,25 @@ dialog {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+.quick-settlements .group-transfers li {
+  flex-wrap: wrap;
+}
+
+.quick-receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.quick-receipt-actions form {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: end;
+}
 .group-participant-list {
   display: grid;
   gap: 13px;

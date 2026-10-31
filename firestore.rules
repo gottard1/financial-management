@@ -50,6 +50,56 @@ service cloud.firestore {
         stateAfter().revision > resource.data.revision;
     }
     match /sharedGroups/{id} {
+      match /settlementMonths/{month} {
+        function canRead() { return signedIn() && (owns(id) || participantAccess(id)); }
+        function emptyLedger() { return { 'revision': 0, 'records': [], 'adjustments': {}, 'ids': {}, 'voided': {} }; }
+        function receiver(personId) {
+          return (owns(id) && group(id).snapshot.adminPersonId == personId) ||
+            (participantAccess(id) && get(/databases/$(database)/documents/groupMemberships/$(membershipId(id))).data.personId == personId);
+        }
+        function validChange(previous) {
+          let next = request.resource.data;
+          let event = next.records[next.records.size() - 1];
+          let snapshot = group(id).snapshot;
+          let beforeFrom = previous.adjustments.get(event.from, 0);
+          let beforeTo = previous.adjustments.get(event.to, 0);
+          let direction = event.status == 'confirmed' ? 1 : -1;
+          return next.keys().hasOnly(['revision', 'records', 'adjustments', 'ids', 'voided', 'baseRevision', 'updatedAt']) &&
+            month.matches('[0-9]{4}-(0[1-9]|1[0-2])') &&
+            next.updatedAt == request.time && next.baseRevision == group(id).revision &&
+            next.revision == previous.revision + 1 && next.records.size() <= 1000 &&
+            next.records == previous.records.concat([event]) &&
+            event.keys().hasOnly(['id', 'scope', 'from', 'to', 'amount', 'date', 'referenceMonth', 'note', 'status', 'receiverUid', 'targetIndex']) &&
+            event.id is string && event.id.size() > 0 && event.amount is int && event.amount > 0 &&
+            event.from != event.to && event.referenceMonth == month && event.scope == 'group:' + snapshot.id &&
+            event.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}') && event.note == '' &&
+            event.receiverUid == request.auth.uid && receiver(event.to) &&
+            participantActive(id, event.from) && participantActive(id, event.to) &&
+            next.adjustments.diff(previous.adjustments).affectedKeys().hasOnly([event.from, event.to]) &&
+            next.adjustments[event.from] == beforeFrom + direction * event.amount &&
+            next.adjustments[event.to] == beforeTo - direction * event.amount &&
+            (validConfirmation(previous, next, event, snapshot, month, beforeFrom, beforeTo) || validVoid(previous, next, event));
+        }
+        function validConfirmation(previous, next, event, snapshot, month, fromAdjustment, toAdjustment) {
+          let base = snapshot.overview.get(month, snapshot.emptyOverview).stats.balances;
+          return event.status == 'confirmed' && event.targetIndex == -1 &&
+            !previous.ids.get(event.id, false) && next.ids.diff(previous.ids).affectedKeys().hasOnly([event.id]) && next.ids[event.id] == true &&
+            next.voided == previous.voided &&
+            event.amount <= -(base[event.from] + fromAdjustment) && event.amount <= base[event.to] + toAdjustment;
+        }
+        function validVoid(previous, next, event) {
+          let original = previous.records[event.targetIndex];
+          return event.status == 'void' && event.targetIndex >= 0 && event.targetIndex < previous.records.size() &&
+            original.status == 'confirmed' && original.receiverUid == request.auth.uid &&
+            event.diff(original).affectedKeys().hasOnly(['status', 'targetIndex']) &&
+            !previous.voided.get(event.id, false) && next.ids == previous.ids &&
+            next.voided.diff(previous.voided).affectedKeys().hasOnly([event.id]) && next.voided[event.id] == true;
+        }
+        allow read: if canRead();
+        allow create: if canRead() && validChange(emptyLedger());
+        allow update: if canRead() && validChange(resource.data);
+        allow delete: if signedIn() && owns(id) && group(id).deleted == true;
+      }
       allow get: if signedIn() && !exists(/databases/$(database)/documents/sharedGroups/$(id)) &&
         id.matches(request.auth.uid + '_.*');
       allow read: if signedIn() && (resource.data.adminUid == request.auth.uid ||

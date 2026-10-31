@@ -1,3 +1,4 @@
+import { publicGroupStats } from './groupOverview.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeInviteEmail, projectSharedGroup } from './groupSharing.js';
@@ -68,7 +69,8 @@ test('shares only group history with exact existing participant IDs and calculat
   assert.deepEqual(result.expenses[0].shares, { a: 2500, b: 7501 });
   assert.equal(result.settlements.length, 1);
   assert.equal(result.settlements[0].id, 's');
-  assert.equal(result.overview['2026-10'].stats.income, 400);
+  assert.equal(result.overview['2026-10'].stats.income, undefined);
+  assert.equal(result.overview['2026-10'].stats.available, undefined);
   assert.equal(result.overview['2026-10'].stats.total, 10001);
   assert.deepEqual(result.overview['2026-10'].stats.shares, { a: 2500, b: 7501 });
   const json = JSON.stringify(result);
@@ -86,7 +88,7 @@ test('shares only group history with exact existing participant IDs and calculat
   assert.throws(() => projectSharedGroup(data, 'missing'));
 });
 
-test('shared overview matches owner totals, budget and benefits while isolating personal records', () => {
+test('shared overview matches common owner totals and budget without sharing salaries or benefits while isolating personal records', () => {
   const data = migrateData(null);
   data.groups = [{ id: 'g', name: 'Casa', memberIds: ['person-0'] }];
   data.months = { '2026-10': { 'person-0': 500000 } };
@@ -99,10 +101,14 @@ test('shared overview matches owner totals, budget and benefits while isolating 
   const shared = projectSharedGroup(data, 'g');
   assert.deepEqual(
     shared.overview['2026-10'].stats,
-    calculateWorkspace(data, '2026-10', 'group:g', data.months['2026-10']),
+    publicGroupStats(calculateWorkspace(data, '2026-10', 'group:g', data.months['2026-10'])),
   );
   assert.deepEqual(shared.overview['2026-10'].plan, data.plans['group:g|2026-10']);
-  assert.equal(shared.overview['2026-10'].benefits.total, 30000);
+  assert.equal(shared.overview['2026-10'].benefits, undefined);
+  assert.equal(shared.overview['2026-10'].stats.income, undefined);
+  assert.equal(shared.overview['2026-10'].stats.available, undefined);
+  assert.ok(!JSON.stringify(shared).includes('500000'));
+  assert.ok(!JSON.stringify(shared).includes('30000'));
   assert.equal(shared.emptyOverview.stats.total, 0);
   assert.equal(shared.emptyOverview.stats.savingsAll, 20000);
   assert.ok(!JSON.stringify(shared).includes('private'));

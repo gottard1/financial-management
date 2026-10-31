@@ -17,20 +17,37 @@ import {
 
 import { MonthlySummary } from '../overview/MonthlySummary.jsx';
 import { OverviewPanel } from '../overview/OverviewPanel.jsx';
+import {
+  watchSettlementMonths,
+  saveSharedSettlement,
+} from '../../infrastructure/firebase/sharedSettlementRepository.js';
+import { ledgerRecords, sharedMonthOverview } from '../../domain/settlements/sharedSettlements.js';
+import { ExpenseList } from '../expenses/ExpenseList.jsx';
 
 const sharingEnabled = import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true';
 
 export function SharedGroupView({ membership, referenceMonth }) {
+  const { user } = useAuth();
   const [group, setGroup] = useState(null);
+  const [ledgers, setLedgers] = useState([]);
+  const [filter, setFilter] = useState('all');
   const [error, setError] = useState('');
   const [localMonth, setMonth] = useState(() => new Date().toLocaleDateString('sv-SE').slice(0, 7));
   const month = referenceMonth || localMonth;
   useEffect(() => {
     setError('');
     setGroup(null);
-    return watchSharedGroup(membership.groupId, setGroup, () =>
+    setLedgers([]);
+    const stopGroup = watchSharedGroup(membership.groupId, setGroup, () =>
       setError('Não foi possível carregar o grupo compartilhado.'),
     );
+    const stopReceipts = watchSettlementMonths(membership.groupId, setLedgers, () =>
+      setError('Não foi possível carregar os recebimentos. Confira as regras do Firestore.'),
+    );
+    return () => {
+      stopGroup();
+      stopReceipts();
+    };
   }, [membership.groupId]);
   if (error)
     return (
@@ -40,9 +57,12 @@ export function SharedGroupView({ membership, referenceMonth }) {
     );
   if (!group) return <p role="status">Carregando grupo…</p>;
   const snapshot = group.snapshot;
-  const overview = snapshot.overview?.[month] || snapshot.emptyOverview;
+  const ledger = ledgers.find((item) => item.month === month);
+  const overview = sharedMonthOverview(snapshot, month, ledger);
   const expenses = snapshot.expenses.filter((item) => item.date.startsWith(month));
-  const settlements = (snapshot.settlements || []).filter((item) => item.referenceMonth === month);
+  const settlements = [...(snapshot.settlements || []), ...ledgerRecords(ledger)].filter(
+    (item) => item.referenceMonth === month,
+  );
   const balance =
     expenses
       .filter((item) => item.status === 'paid')
@@ -83,9 +103,22 @@ export function SharedGroupView({ membership, referenceMonth }) {
             {...overview}
             mode="group"
             readOnly
+            month={month}
+            receiverId={membership.personId}
+            receiverUid={user?.uid}
+            onSharedReceive={(transfer, id) =>
+              saveSharedSettlement(membership.groupId, {
+                month,
+                transfer,
+                id,
+                date: new Date().toLocaleDateString('sv-SE'),
+              })
+            }
+            onSharedUndo={(voidId) => saveSharedSettlement(membership.groupId, { month, voidId })}
             scope={`group:${snapshot.id}`}
             data={{
               people: snapshot.people,
+              settlements: settlements.map((item) => ({ ...item, scope: `group:${snapshot.id}` })),
               groups: [{ id: snapshot.id, memberIds: snapshot.people.map((person) => person.id) }],
             }}
           />
@@ -106,37 +139,23 @@ export function SharedGroupView({ membership, referenceMonth }) {
         Saldo após repasses: <strong>{money(Math.abs(balance))}</strong>{' '}
         {balance > 0 ? 'a receber' : balance < 0 ? 'a pagar' : '· tudo acertado'}
       </p>
-      {expenses.length ? (
-        <ul>
-          {expenses.map((item) => (
-            <li key={item.id}>
-              <strong>{item.description}</strong> · {money(item.amount)} ·{' '}
-              {item.date.split('-').reverse().join('/')}
-              {item.installments &&
-                ` · Parcela ${item.installments.current} de ${item.installments.total}`}
-              <br />
-              Sua parte: {money(item.shares[membership.personId] || 0)} ·{' '}
-              {item.status === 'paid' ? 'Pago' : 'Pendente'} · Pagador: {name(item.payer)}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="empty">Nenhuma despesa neste mês.</p>
-      )}
-      <h4>Histórico de repasses</h4>
-      {settlements.length ? (
-        <ul>
-          {settlements.map((item) => (
-            <li key={item.id}>
-              {name(item.from)} → {name(item.to)} · {money(item.amount)} ·{' '}
-              {item.date.split('-').reverse().join('/')} ·{' '}
-              {item.status === 'void' ? 'Cancelado' : 'Confirmado'}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>Nenhum repasse nesta competência.</p>
-      )}
+      <ExpenseList
+        mode="group"
+        readOnly
+        data={{ people: snapshot.people }}
+        group={{ name: snapshot.name }}
+        memberIds={snapshot.people.map((person) => person.id)}
+        expenses={expenses}
+        visible={expenses
+          .filter((item) => filter === 'all' || item.status === filter)
+          .map((item) => ({
+            ...item,
+            participants: item.participants || Object.keys(item.shares),
+          }))}
+        filter={filter}
+        setFilter={setFilter}
+        incomes={{}}
+      />
     </article>
   );
 }
@@ -229,6 +248,12 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
     await run(async () => {
       if (!activeGroupMembers(group).includes(personId))
         throw new Error('Selecione um participante do grupo.');
+      if (!group.adminPersonId)
+        throw new Error('Edite o grupo e escolha seu nome em “Quem é você neste grupo?”.');
+      if (personId === group.adminPersonId)
+        throw new Error(
+          'Seu nome já está vinculado à conta que administra o grupo. Convide outro participante.',
+        );
       normalizeInviteEmail(email);
       const id = sharedGroupId(user.uid, group.id);
       const current = owned.find((item) => item.id === id);
