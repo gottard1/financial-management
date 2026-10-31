@@ -158,6 +158,8 @@ Para ativar a versão: habilite Google, configure as três variáveis no servido
 
 O nome no grupo e o nome do perfil são independentes. Um convite para “Bia” pode ser aceito por uma conta com perfil “Beatriz Silva”; o participante mantém o ID, o nome “Bia” e as despesas do grupo. O aceite não substitui o perfil pessoal e não concede acesso antes da confirmação.
 
+Se os logs da Vercel mostrarem `ERR_REQUIRE_ESM` em `jwks-rsa` ao carregar `jose`, a função falhou antes de executar a consulta. O projeto fixa `firebase-admin` em `13.10.0`, com a árvore compatível de dependências, e testa a inicialização sem `require(ESM)`. Preserve o lockfile e use `npm ci` no deploy. O problema de compatibilidade está registrado no [repositório do Firebase Admin](https://github.com/firebase/firebase-admin-node/issues/3181). Essa correção não exige mudar as regras do Firestore nem gerar novas credenciais; exige publicar o código e gerar um novo deploy.
+
 - Framework preset: Vite.
 - Instalação: `npm ci`.
 - Build: `npm run build`.
