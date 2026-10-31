@@ -1,7 +1,7 @@
 import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { Progress } from '../../components/ui/Progress.jsx';
-export function OverviewPanel({ stats, mode, plan, data, go, scope }) {
+export function OverviewPanel({ stats, mode, plan, data, go, scope, readOnly = false }) {
   const groupMode = mode === 'group';
   const categories = Object.entries(stats.categories || {}).sort((a, b) => b[1] - a[1]);
   const group = data.groups.find((item) => 'group:' + item.id === scope);
@@ -68,8 +68,17 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope }) {
               />
             </section>
           </div>
-          <button type="button" className="button secondary" onClick={() => go('budget')}>
-            {groupMode ? 'Definir orçamento do grupo' : 'Definir meu orçamento'}
+          <button
+            type="button"
+            className="button secondary"
+            disabled={readOnly}
+            onClick={() => go('budget')}
+          >
+            {readOnly
+              ? 'Orçamento gerenciado pelo administrador'
+              : groupMode
+                ? 'Definir orçamento do grupo'
+                : 'Definir meu orçamento'}
           </button>
         </article>
         {groupMode ? (
@@ -138,8 +147,15 @@ export function OverviewPanel({ stats, mode, plan, data, go, scope }) {
               Registre uma devolução quando o dinheiro for recebido para atualizar os saldos. O
               aplicativo não realiza pagamentos.
             </p>
-            <button type="button" className="button primary" onClick={() => go('settlements')}>
-              Registrar ou consultar repasses
+            <button
+              type="button"
+              className="button primary"
+              disabled={readOnly}
+              onClick={() => go('settlements')}
+            >
+              {readOnly
+                ? 'Repasses gerenciados pelo administrador'
+                : 'Registrar ou consultar repasses'}
             </button>
           </article>
         ) : (

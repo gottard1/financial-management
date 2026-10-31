@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
+import { recurrenceLabel } from '../../domain/expenses/recurringExpenses.js';
 
 export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
   const dialog = useRef();
@@ -9,7 +10,7 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
       items.map((item) => [
         item.id,
         {
-          selected: true,
+          selected: !item.unavailableReason,
           amount:
             item.fixedAmountType === 'variable'
               ? ''
@@ -65,6 +66,7 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
                   <input
                     type="checkbox"
                     checked={entries[item.id].selected}
+                    disabled={Boolean(item.unavailableReason)}
                     onChange={(event) => update(item.id, { selected: event.target.checked })}
                   />
                   <strong>{item.description}</strong>
@@ -73,6 +75,19 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
                   {item.fixedAmountType === 'variable' ? 'Valor variável' : 'Valor fixo'} · Mês
                   anterior: {money(item.amount)}
                 </p>
+                {item.unavailableReason && <p className="hint">{item.unavailableReason}</p>}
+                {item.installments && (
+                  <p className="hint">
+                    Próximo lançamento:{' '}
+                    {recurrenceLabel({
+                      ...item,
+                      installments: {
+                        ...item.installments,
+                        current: item.installments.current + 1,
+                      },
+                    })}
+                  </p>
+                )}
               </div>
               <label className="field">
                 Valor neste mês (R$)

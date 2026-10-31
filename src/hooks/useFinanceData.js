@@ -155,5 +155,17 @@ export function useFinanceData(namespace = 'local') {
       sync.current?.flush();
     },
     useCloudVersion: () => sync.current?.useCloud(),
+    commitData: async (update) => {
+      if (loaded.blocked)
+        throw new Error(
+          'Os dados originais estão protegidos. Exporte o backup antes de continuar.',
+        );
+      if (cloudEnabled) {
+        if (!sync.current) throw new Error('Aguarde a conexão com a nuvem antes de apagar dados.');
+        return sync.current.commit(update);
+      }
+      setData(update);
+      return currentData.current;
+    },
   };
 }

@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider.jsx';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { normalizeInviteEmail, projectSharedGroup } from '../../domain/groups/groupSharing.js';
 import { stableJson } from '../../domain/budget/financeCloudCodec.js';
+import { activeGroupMembers } from '../../domain/groups/groupMembers.js';
 import {
   acceptGroupInvite,
   cancelGroupInvite,
@@ -14,13 +15,18 @@ import {
   watchSharing,
 } from '../../infrastructure/firebase/groupSharingRepository.js';
 
+import { MonthlySummary } from '../overview/MonthlySummary.jsx';
+import { OverviewPanel } from '../overview/OverviewPanel.jsx';
+
 const sharingEnabled = import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true';
 
-function SharedGroupView({ membership }) {
+export function SharedGroupView({ membership, referenceMonth }) {
   const [group, setGroup] = useState(null);
   const [error, setError] = useState('');
-  const [month, setMonth] = useState(() => new Date().toLocaleDateString('sv-SE').slice(0, 7));
+  const [localMonth, setMonth] = useState(() => new Date().toLocaleDateString('sv-SE').slice(0, 7));
+  const month = referenceMonth || localMonth;
   useEffect(() => {
+    setError('');
     setGroup(null);
     return watchSharedGroup(membership.groupId, setGroup, () =>
       setError('Não foi possível carregar o grupo compartilhado.'),
@@ -34,6 +40,7 @@ function SharedGroupView({ membership }) {
     );
   if (!group) return <p role="status">Carregando grupo…</p>;
   const snapshot = group.snapshot;
+  const overview = snapshot.overview?.[month] || snapshot.emptyOverview;
   const expenses = snapshot.expenses.filter((item) => item.date.startsWith(month));
   const settlements = (snapshot.settlements || []).filter((item) => item.referenceMonth === month);
   const balance =
@@ -63,9 +70,32 @@ function SharedGroupView({ membership }) {
         Você está vinculado a <strong>{name(membership.personId)}</strong>. O administrador gerencia
         os lançamentos.
       </p>
-      <label className="field">
-        Mês <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-      </label>
+      {!referenceMonth && (
+        <label className="field">
+          Mês{' '}
+          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+        </label>
+      )}
+      {overview ? (
+        <>
+          <MonthlySummary {...overview} mode="group" />
+          <OverviewPanel
+            {...overview}
+            mode="group"
+            readOnly
+            scope={`group:${snapshot.id}`}
+            data={{
+              people: snapshot.people,
+              groups: [{ id: snapshot.id, memberIds: snapshot.people.map((person) => person.id) }],
+            }}
+          />
+        </>
+      ) : (
+        <p className="notice">
+          O administrador precisa atualizar os dados compartilhados para disponibilizar o resumo
+          completo deste mês.
+        </p>
+      )}
       <p>
         Sua parte nas contas:{' '}
         <strong>
@@ -82,6 +112,8 @@ function SharedGroupView({ membership }) {
             <li key={item.id}>
               <strong>{item.description}</strong> · {money(item.amount)} ·{' '}
               {item.date.split('-').reverse().join('/')}
+              {item.installments &&
+                ` · Parcela ${item.installments.current} de ${item.installments.total}`}
               <br />
               Sua parte: {money(item.shares[membership.personId] || 0)} ·{' '}
               {item.status === 'paid' ? 'Pago' : 'Pendente'} · Pagador: {name(item.payer)}
@@ -136,7 +168,13 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
   useEffect(() => {
     if (!sharingEnabled || !user || localMode) return undefined;
     const stops = [
-      watchSharing('sharedGroups', 'adminUid', user.uid, setOwned, fail),
+      watchSharing(
+        'sharedGroups',
+        'adminUid',
+        user.uid,
+        (groups) => setOwned(groups.filter((group) => !group.deleted)),
+        fail,
+      ),
       watchSharing('groupInvites', 'adminUid', user.uid, setSent, fail),
       watchSharing('groupMemberships', 'uid', user.uid, setMemberships, fail),
     ];
@@ -156,7 +194,7 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
       try {
         for (const shared of ownedRef.current) {
           if (
-            data.groups.some((item) => item.id === shared.snapshot.id) &&
+            data.groups.some((item) => !item.deleted && item.id === shared.snapshot.id) &&
             stableJson(projectSharedGroup(data, shared.snapshot.id)) !== stableJson(shared.snapshot)
           )
             await publishGroup(data, shared.snapshot.id, shared.revision);
@@ -189,7 +227,7 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
   async function invite(event) {
     event.preventDefault();
     await run(async () => {
-      if (!group?.memberIds.includes(personId))
+      if (!activeGroupMembers(group).includes(personId))
         throw new Error('Selecione um participante do grupo.');
       normalizeInviteEmail(email);
       const id = sharedGroupId(user.uid, group.id);
@@ -329,7 +367,7 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
             Grupo que você administra
             <select
               required
-              disabled={!data.groups.length}
+              disabled={!data.groups.some((item) => !item.deleted)}
               value={groupId}
               onChange={(event) => {
                 setGroupId(event.target.value);
@@ -338,11 +376,13 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
               }}
             >
               <option value="">Selecione um grupo</option>
-              {data.groups.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
+              {data.groups
+                .filter((item) => !item.deleted)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="field">
@@ -357,7 +397,7 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
               }}
             >
               <option value="">Selecione uma pessoa</option>
-              {(group?.memberIds || []).map((id) => (
+              {activeGroupMembers(group).map((id) => (
                 <option key={id} value={id}>
                   {data.people.find((person) => person.id === id)?.name}
                 </option>
@@ -390,8 +430,9 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
           <span className="pill">{sent.length}</span>
         </div>
         <p className="muted">
-          {pendingSent.length} pendente(s) · {sent.length - pendingSent.length} conta(s)
-          vinculada(s)
+          {pendingSent.length} pendente(s) ·{' '}
+          {sent.filter((item) => item.status === 'accepted').length} conta(s) vinculada(s) ·{' '}
+          {sent.filter((item) => item.status === 'revoked').length} acesso(s) removido(s)
         </p>
         {sent.length ? (
           <ul className="sharing-record-list">
@@ -403,7 +444,11 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
                   <small>{item.email}</small>
                 </div>
                 <span className={'pill ' + (item.status === 'accepted' ? 'paid' : 'pending')}>
-                  {item.status === 'accepted' ? 'Conta vinculada' : 'Pendente'}
+                  {item.status === 'accepted'
+                    ? 'Conta vinculada'
+                    : item.status === 'revoked'
+                      ? 'Acesso removido'
+                      : 'Pendente'}
                 </span>
                 {item.status === 'pending' && (
                   <div className="actions sharing-record-actions">
@@ -452,7 +497,11 @@ export function GroupSharingPanel({ data, notify, syncBlocked = false }) {
               onClick={() =>
                 run(async () => {
                   for (const item of owned) {
-                    if (data.groups.some((candidate) => candidate.id === item.snapshot.id))
+                    if (
+                      data.groups.some(
+                        (candidate) => !candidate.deleted && candidate.id === item.snapshot.id,
+                      )
+                    )
                       await publishGroup(data, item.snapshot.id, item.revision);
                   }
                   notify?.('Dados compartilhados atualizados.');

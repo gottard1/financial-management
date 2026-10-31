@@ -78,6 +78,7 @@ export function WorkspaceSelector({
             {groups.map((item) => (
               <option value={item.id} key={item.id}>
                 {item.name}
+                {item.deleted ? ' · Excluído (histórico)' : ''}
               </option>
             ))}
           </select>

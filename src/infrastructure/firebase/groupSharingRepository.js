@@ -10,12 +10,29 @@ import {
 } from 'firebase/firestore';
 import { auth } from './client.js';
 import { normalizeInviteEmail, projectSharedGroup } from '../../domain/groups/groupSharing.js';
+import { revokeGroupMemberAccess } from './groupMemberAccess.js';
+import { deleteSharedGroup, purgeSharedGroupHistory } from './groupDeletion.js';
 
 const database = () => {
   if (!auth?.currentUser) throw new Error('Entre na sua conta para compartilhar um grupo.');
   return getFirestore(auth.app);
 };
 export const sharedGroupId = (uid, groupId) => `${uid}_${groupId}`;
+export const removeSharedGroup = (groupId) =>
+  deleteSharedGroup(database(), auth.currentUser.uid, sharedGroupId(auth.currentUser.uid, groupId));
+export const eraseSharedGroupHistory = (groupId) =>
+  purgeSharedGroupHistory(
+    database(),
+    auth.currentUser.uid,
+    sharedGroupId(auth.currentUser.uid, groupId),
+  );
+export const removeMemberAccess = (groupId, personId) =>
+  revokeGroupMemberAccess(
+    database(),
+    auth.currentUser.uid,
+    sharedGroupId(auth.currentUser.uid, groupId),
+    personId,
+  );
 export function watchSharing(collectionName, field, value, receive, fail) {
   return onSnapshot(
     query(collection(database(), collectionName), where(field, '==', value)),
@@ -35,8 +52,14 @@ export async function publishGroup(data, groupId, expectedRevision = null) {
   const adminUid = auth.currentUser.uid;
   const ref = doc(db, 'sharedGroups', sharedGroupId(adminUid, groupId));
   const snapshot = projectSharedGroup(data, groupId);
+  if (data.groups.find((group) => group.id === groupId)?.deleted)
+    throw new Error('Este grupo foi excluído e está disponível somente no histórico.');
   await runTransaction(db, async (transaction) => {
     const existing = await transaction.get(ref);
+    if (existing.exists() && existing.data().deleted)
+      throw new Error(
+        'Este grupo já foi excluído. Atualize os dados da conta para consultar o histórico.',
+      );
     if (existing.exists() && existing.data().revision !== expectedRevision)
       throw new Error(
         'O grupo mudou em outra sessão. Reabra o compartilhamento antes de publicar.',

@@ -1,4 +1,5 @@
 import { splitExpense, summarize } from '../expenses/expenseCalculations.js';
+import { validateInstallments } from '../expenses/recurringExpenses.js';
 import {
   applySettlements,
   validateSettlementRecord,
@@ -260,6 +261,8 @@ export function migrateData(input) {
     record(group, 'Grupo');
     uniqueId(group.id, groupIds, 'grupo');
     text(group.name, 'Nome do grupo');
+    if (group.deleted !== undefined && typeof group.deleted !== 'boolean')
+      throw new Error('Situação do grupo inválida.');
     if (
       !Array.isArray(group.memberIds) ||
       group.memberIds.length === 0 ||
@@ -267,7 +270,19 @@ export function migrateData(input) {
       group.memberIds.some((id) => !personIds.has(id))
     )
       throw new Error('Integrantes do grupo inválidos no backup.');
-    return { ...group, memberIds: [...group.memberIds] };
+    if (
+      group.removedMemberIds !== undefined &&
+      (!Array.isArray(group.removedMemberIds) ||
+        new Set(group.removedMemberIds).size !== group.removedMemberIds.length ||
+        group.removedMemberIds.some((id) => !group.memberIds.includes(id)) ||
+        group.removedMemberIds.length >= group.memberIds.length)
+    )
+      throw new Error('Participantes removidos do grupo inválidos.');
+    return {
+      ...group,
+      memberIds: [...group.memberIds],
+      ...(group.removedMemberIds ? { removedMemberIds: [...group.removedMemberIds] } : {}),
+    };
   });
   const context = { people, groups };
   const months = {};
@@ -348,6 +363,7 @@ export function migrateData(input) {
       !['fixed', 'variable'].includes(expense.fixedAmountType)
     )
       throw new Error('Tipo de valor recorrente inválido.');
+    validateInstallments(expense);
     return {
       ...expense,
       category,

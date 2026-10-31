@@ -10,6 +10,17 @@ service cloud.firestore {
     }
     function owns(id) { return signedIn() && group(id).adminUid == request.auth.uid; }
     function membershipId(groupId) { return request.auth.uid + '_' + groupId; }
+    function participantActive(groupId, personId) {
+      let record = group(groupId);
+      let snapshot = record.snapshot;
+      return (!('deleted' in record) || record.deleted != true) &&
+        (!('activeMemberIds' in snapshot) || personId in snapshot.activeMemberIds);
+    }
+    function participantAccess(groupId) {
+      let path = /databases/$(database)/documents/groupMemberships/$(membershipId(groupId));
+      return exists(path) && participantActive(groupId, get(path).data.personId) &&
+        get(/databases/$(database)/documents/groupInvites/$(get(path).data.inviteId)).data.status == 'accepted';
+    }
     match /users/{uid}/finance/{recordId} {
       function owner() { return signedIn() && request.auth.uid == uid; }
       function stateAfter() {
@@ -42,15 +53,18 @@ service cloud.firestore {
       allow get: if signedIn() && !exists(/databases/$(database)/documents/sharedGroups/$(id)) &&
         id.matches(request.auth.uid + '_.*');
       allow read: if signedIn() && (resource.data.adminUid == request.auth.uid ||
-        exists(/databases/$(database)/documents/groupMemberships/$(membershipId(id))));
+        participantAccess(id));
       allow create: if signedIn() && request.resource.data.adminUid == request.auth.uid &&
         id == request.auth.uid + '_' + request.resource.data.snapshot.id &&
-        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt']) &&
+        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt', 'deleted']) &&
+        (!('deleted' in request.resource.data) || request.resource.data.deleted is bool) &&
         request.resource.data.revision == 1 && request.resource.data.updatedAt == request.time;
       allow update: if signedIn() && resource.data.adminUid == request.auth.uid &&
         request.resource.data.adminUid == resource.data.adminUid &&
         request.resource.data.snapshot.id == resource.data.snapshot.id &&
-        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt']) &&
+        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt', 'deleted']) &&
+        (!('deleted' in request.resource.data) || request.resource.data.deleted is bool) &&
+        (!('deleted' in resource.data) || resource.data.deleted != true || request.resource.data.deleted == true) &&
         request.resource.data.revision == resource.data.revision + 1 &&
         request.resource.data.updatedAt == request.time;
     }
@@ -63,7 +77,7 @@ service cloud.firestore {
         let next = request.resource.data;
         return next.keys().hasOnly(['groupId', 'personId', 'email', 'personName',
           'groupName', 'adminUid', 'status', 'updatedAt']) &&
-          next.adminUid == request.auth.uid && owns(next.groupId) &&
+          next.adminUid == request.auth.uid && owns(next.groupId) && participantActive(next.groupId, next.personId) &&
           id == next.groupId + '_' + next.personId &&
           next.status == 'pending' && next.email is string &&
           next.email == next.email.lower() && next.email.size() <= 254 &&
@@ -71,21 +85,30 @@ service cloud.firestore {
       }
       allow create: if signedIn() && pendingInvite();
       allow delete: if signedIn() && resource.data.adminUid == request.auth.uid &&
-        resource.data.status == 'pending';
-      allow update: if signedIn() && resource.data.status == 'pending' && (
-        (resource.data.adminUid == request.auth.uid && pendingInvite() &&
-          request.resource.data.groupId == resource.data.groupId &&
-          request.resource.data.personId == resource.data.personId) ||
+        (resource.data.status == 'pending' || (('deleted' in group(resource.data.groupId)) && group(resource.data.groupId).deleted == true));
+      allow update: if signedIn() && (
+        (resource.data.adminUid == request.auth.uid && owns(resource.data.groupId) &&
+          (resource.data.status == 'accepted' || (resource.data.status == 'pending' && ('deleted' in group(resource.data.groupId)) && group(resource.data.groupId).deleted == true)) &&
+          request.resource.data.status == 'revoked' && request.resource.data.updatedAt == request.time &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        (resource.data.status in ['pending', 'revoked'] &&
+          resource.data.adminUid == request.auth.uid && pendingInvite() &&
+          request.resource.data.groupId == resource.data.groupId && request.resource.data.personId == resource.data.personId) ||
+        (resource.data.status == 'pending' &&
         (verifiedEmail() && resource.data.email == request.auth.token.email.lower() &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedUid']) &&
           request.resource.data.status == 'accepted' &&
           request.resource.data.acceptedUid == request.auth.uid &&
-          getAfter(/databases/$(database)/documents/groupMemberships/$(membershipId(resource.data.groupId))).data.inviteId == id));
+          getAfter(/databases/$(database)/documents/groupMemberships/$(membershipId(resource.data.groupId))).data.inviteId == id)));
     }
     match /groupMemberships/{id} {
       allow get: if signedIn() && !exists(/databases/$(database)/documents/groupMemberships/$(id)) &&
         id.matches(request.auth.uid + '_.*');
-      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || owns(resource.data.groupId));
+      allow delete: if signedIn() && owns(resource.data.groupId) &&
+        ((('deleted' in group(resource.data.groupId)) && group(resource.data.groupId).deleted == true) ||
+          (getAfter(/databases/$(database)/documents/groupInvites/$(resource.data.inviteId)).data.status == 'revoked' &&
+          getAfter(/databases/$(database)/documents/groupInvites/$(resource.data.inviteId)).data.acceptedUid == resource.data.uid));
       allow create: if verifiedEmail() &&
         request.resource.data.keys().hasOnly(['uid', 'groupId', 'personId', 'inviteId']) &&
         request.resource.data.uid == request.auth.uid &&
@@ -94,7 +117,7 @@ service cloud.firestore {
         let next = request.resource.data;
         let invite = get(/databases/$(database)/documents/groupInvites/$(next.inviteId)).data;
         let accepted = getAfter(/databases/$(database)/documents/groupInvites/$(next.inviteId)).data;
-        return invite.status == 'pending' && invite.email == request.auth.token.email.lower() &&
+        return invite.status == 'pending' && invite.email == request.auth.token.email.lower() && participantActive(next.groupId, next.personId) &&
           invite.groupId == next.groupId && invite.personId == next.personId &&
           accepted.status == 'accepted' && accepted.acceptedUid == request.auth.uid;
       }

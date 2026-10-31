@@ -31,6 +31,26 @@ function harness({ initialData = data(), marker, upload = async () => 1 } = {}) 
   return { engine, events };
 }
 
+test('explicit commits await cloud acknowledgement and fail when deletion cannot be confirmed', async () => {
+  let offline = false;
+  const { engine, events } = harness({
+    marker: { baseRevision: 1, dirty: false },
+    upload: async (_, revision) => {
+      if (offline) throw new Error('offline');
+      return revision + 1;
+    },
+  });
+  engine.receive({ revision: 1, data: data() });
+  const saved = await engine.commit(() => data('Confirmado'));
+  assert.equal(saved.people[0].name, 'Confirmado');
+  assert.deepEqual(events.markers.at(-1), { baseRevision: 2, dirty: false });
+  offline = true;
+  await assert.rejects(() => engine.commit(() => data('Pendente')), /offline/);
+  assert.equal(events.states.at(-1), 'offline');
+  assert.deepEqual(events.markers.at(-1), { baseRevision: 2, dirty: true });
+  engine.stop();
+});
+
 test('migrates existing local data once when the server confirms a new account', async () => {
   const initialData = data('Ana');
   const { engine, events } = harness({ initialData });

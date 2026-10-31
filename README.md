@@ -70,6 +70,8 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 
 ### Espaços de grupo
 
+- Exclusão de grupos com histórico preservado para consulta, ou exclusão definitiva do histórico por confirmação digitada. A limpeza definitiva remove os registros financeiros daquele grupo e os convites, preserva pessoas e rendas e mantém apenas um pequeno marcador remoto de bloqueio.
+
 - Crie vários grupos e escolha seus membros entre as pessoas cadastradas.
 - Divida cada despesa igualmente, proporcionalmente à renda ou com percentuais personalizados que somam 100%.
 - Selecione os participantes de cada conta: pode ser o grupo inteiro, um subconjunto ou uma única pessoa.
@@ -80,6 +82,7 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 - O pagador pode ser um integrante que não participa da divisão; nesse caso, recebe o reembolso correspondente.
 - Novos integrantes não entram automaticamente em despesas antigas, pois cada conta mantém sua própria lista de participantes.
 - Contas recorrentes com valor fixo ou variável. Ao trazer o mês anterior, revise os valores e selecione quais contas copiar; as variáveis exigem o valor atual antes de salvar. As cópias ficam pendentes, sem duplicar a mesma origem ou alterar meses anteriores.
+- Compras parceladas com quantidade total e parcela atual. Informe o valor de uma parcela; ao trazer o mês seguinte, a numeração avança até a última e a compra deixa de ser oferecida para cópia. Contas mensais sem prazo continuam disponíveis. Os lançamentos futuros não são criados automaticamente.
 
 ### Renda e estimativa do líquido
 
@@ -230,7 +233,7 @@ Também confira no navegador: fluxos individuais e de grupo, cadastro e edição
 
 O formato v3 contém `people`, `groups`, `months`, `incomeConfigs`, `expenses`, `plans`, `goals` e `contributions`. Rendas e configurações mensais são mapas por ID da pessoa. Grupos contêm seus `memberIds`. Despesas guardam o `payer`, seus `participants` e os `percentages` quando personalizados.
 
-Escopos usam `person:<id>` e `group:<id>`. Uma conta em grupo nunca é duplicada para gerar os resumos pessoais; as cotas são derivadas pelo mesmo motor de rateio. Pessoas e grupos não são removidos nesta versão. É possível renomear grupos e adicionar integrantes, preservando o histórico.
+Escopos usam `person:<id>` e `group:<id>`. Uma conta em grupo nunca é duplicada para gerar os resumos pessoais; as cotas são derivadas pelo mesmo motor de rateio. Os cadastros de pessoas e grupos são preservados. É possível renomear grupos, adicionar, remover e reativar integrantes. A remoção conserva os IDs históricos em `memberIds`, registra os inativos em `removedMemberIds` e revoga convites e acesso da conta vinculada, sem apagar despesas ou repasses. O grupo mantém pelo menos um integrante ativo.
 
 ## Limitações atuais
 

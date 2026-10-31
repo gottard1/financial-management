@@ -3174,6 +3174,27 @@ dialog {
 .sharing-panel {
   margin-bottom: 28px;
 }
+.group-member-chips .group-participant {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.group-member-chips .group-participant.removed {
+  color: var(--muted);
+  border-style: dashed;
+}
+.group-participant small {
+  font-size: 0.68rem;
+}
+.group-participant .text-button {
+  font-size: 0.74rem;
+  color: #a13e27;
+}
 .sharing-header > .muted {
   max-width: 760px;
   line-height: 1.7;

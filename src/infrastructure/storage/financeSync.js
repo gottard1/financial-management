@@ -24,6 +24,8 @@ export function createFinanceSync({
   let latestRemote;
   let remoteSequence = 0;
   let timer;
+  let lastFailure;
+  const idleWaiters = [];
   const persistMarker = () => saveMarker({ baseRevision, dirty });
   const status = (value) => {
     if (!stopped) onStatus(value);
@@ -91,11 +93,14 @@ export function createFinanceSync({
       persistMarker();
       onError(null);
       status(dirty ? 'pending' : 'saved');
+      lastFailure = null;
     } catch (error) {
+      lastFailure = error;
       if (error.code === 'finance/conflict') conflict = true;
       fail(error);
     } finally {
       saving = false;
+      idleWaiters.splice(0).forEach((resolve) => resolve());
       if (
         !stopped &&
         remoteSequence > capturedRemote &&
@@ -111,7 +116,7 @@ export function createFinanceSync({
     status('pending');
     timer = setTimeout(flush, 600);
   }
-  return {
+  const api = {
     receive,
     fail,
     flush,
@@ -134,6 +139,21 @@ export function createFinanceSync({
       else status('pending');
       return data;
     },
+    async commit(update) {
+      if (saving) await new Promise((resolve) => idleWaiters.push(resolve));
+      if (stopped || conflict || !ready)
+        throw new Error('Conecte-se e resolva a sincronização antes de apagar o histórico.');
+      if (dirty) await flush();
+      if (dirty || conflict || stopped)
+        throw lastFailure || new Error('Ainda há alterações pendentes. Aguarde a sincronização.');
+      api.update(typeof update === 'function' ? update(data) : update);
+      await flush();
+      if (dirty || conflict || stopped)
+        throw (
+          lastFailure || new Error('A exclusão ainda não foi confirmada na nuvem. Tente novamente.')
+        );
+      return data;
+    },
     useCloud() {
       if (!conflict || !latestRemote)
         throw new Error('A versão da nuvem ainda não está disponível. Tente novamente.');
@@ -145,4 +165,5 @@ export function createFinanceSync({
       clearTimeout(timer);
     },
   };
+  return api;
 }

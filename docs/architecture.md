@@ -42,6 +42,8 @@ O estado local continua sendo um documento inteiro para backup e compatibilidade
 
 Cada despesa registra uma lista explícita de `participants` e um `payer`. O pagador pode ser membro do grupo sem participar da divisão. Novos integrantes não são incluídos retroativamente nas contas anteriores. Uma pessoa pode participar de vários grupos; seu resumo agrega as próprias despesas e suas cotas nesses grupos, sem duplicar lançamentos.
 
+A remoção de integrantes é lógica: `memberIds` continua contendo as referências históricas e `removedMemberIds` identifica quem não participa de novos lançamentos. Cálculos históricos e acertos usam as referências originais, inclusive de pessoas removidas; os formulários de novas despesas e convites usam `activeGroupMembers`. Antes de marcar a remoção local, o administrador revoga o acesso remoto em transação, cancelando convites pendentes ou revogando convites aceitos e excluindo a associação. A reativação mantém o ID anterior e exige novo aceite para recuperar o acesso.
+
 O rateio usa o método dos maiores restos para conservar centavos. Percentuais personalizados são validados em centésimos de porcentagem e somam 100%. O resumo retorna responsabilidades, pagamentos, saldos e sugestões de transferências entre devedores e credores por ID.
 
 O formato atual é v3, salvo em `financial-management-v3`. O adaptador migra v1/v2, convertendo escopos, pagadores, participantes, rendas, planos, metas e aportes. Os registros originais permanecem intactos nas antigas chaves. Nomenclaturas antigas ficam restritas à migração e seus testes.

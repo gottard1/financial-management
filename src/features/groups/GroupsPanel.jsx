@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-export function GroupsPanel({ data, setData, notify }) {
+import {
+  activeGroupMembers,
+  removeGroupMember,
+  deleteGroup,
+  purgeGroupHistoryBatch,
+  groupHistoryCount,
+} from '../../domain/groups/groupMembers.js';
+import { useAuth } from '../auth/AuthProvider.jsx';
+import { PurgeGroupDialog } from './PurgeGroupDialog.jsx';
+import { removeReceipt } from '../../infrastructure/storage/receiptRepository.js';
+export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, onExport }) {
+  const { user, localMode } = useAuth();
+  const [removing, setRemoving] = useState('');
+  const [removeError, setRemoveError] = useState('');
+  const [purgeTarget, setPurgeTarget] = useState(null);
+  const [purgeError, setPurgeError] = useState('');
   const [personName, setPersonName] = useState('');
   const [groupName, setGroupName] = useState('');
   const [memberIds, setMemberIds] = useState([]);
@@ -7,7 +22,8 @@ export function GroupsPanel({ data, setData, notify }) {
   const [personError, setPersonError] = useState('');
   const [groupError, setGroupError] = useState('');
   const people = data.people || [];
-  const groups = data.groups || [];
+  const groups = (data.groups || []).filter((group) => !group.deleted);
+  const archivedGroups = (data.groups || []).filter((group) => group.deleted);
   const editing = groups.find((group) => group.id === editingId);
   const normalize = (name) => name.trim().toLocaleLowerCase('pt-BR');
   function createPerson(event) {
@@ -37,6 +53,10 @@ export function GroupsPanel({ data, setData, notify }) {
   }
   function saveGroup(event) {
     event.preventDefault();
+    if (editingId && !editing) {
+      setGroupError('Este grupo foi excluído e não pode ser alterado.');
+      return;
+    }
     const name = groupName.trim();
     if (!name || name.length > 80) {
       setGroupError('Informe um nome de até 80 caracteres para o grupo.');
@@ -48,8 +68,8 @@ export function GroupsPanel({ data, setData, notify }) {
       setGroupError('Já existe um grupo com este nome.');
       return;
     }
-    const members = [...new Set([...(editing?.memberIds || []), ...memberIds])];
-    if (members.length < 2) {
+    const members = [...new Set([...activeGroupMembers(editing), ...memberIds])];
+    if (members.length < (editingId ? 1 : 2)) {
       setGroupError('Selecione pelo menos duas pessoas para compartilhar as contas.');
       return;
     }
@@ -63,14 +83,21 @@ export function GroupsPanel({ data, setData, notify }) {
       groups: editingId
         ? current.groups.map((group) =>
             group.id === editingId
-              ? { ...group, name, memberIds: [...new Set([...group.memberIds, ...members])] }
+              ? {
+                  ...group,
+                  name,
+                  memberIds: [...new Set([...group.memberIds, ...members])],
+                  removedMemberIds: (group.removedMemberIds || []).filter(
+                    (id) => !members.includes(id),
+                  ),
+                }
               : group,
           )
         : [...current.groups, { id, name, memberIds: members }],
     }));
     notify?.(
       editingId
-        ? 'Grupo atualizado. Os participantes anteriores foram mantidos.'
+        ? 'Grupo atualizado. O histórico dos participantes foi preservado.'
         : 'Grupo criado. Selecione o espaço Grupo para registrar as contas.',
     );
     resetGroup();
@@ -78,15 +105,118 @@ export function GroupsPanel({ data, setData, notify }) {
   function editGroup(group) {
     setEditingId(group.id);
     setGroupName(group.name);
-    setMemberIds([...group.memberIds]);
+    setMemberIds(activeGroupMembers(group));
     setGroupError('');
   }
   function toggleMember(id) {
-    if (editing?.memberIds.includes(id)) return;
+    if (activeGroupMembers(editing).includes(id)) return;
     setMemberIds((current) =>
       current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
     );
     setGroupError('');
+  }
+  async function removeMember(group, personId) {
+    const name = people.find((person) => person.id === personId)?.name || 'esta pessoa';
+    if (
+      !window.confirm(
+        `Remover ${name} de ${group.name}? O acesso e os convites serão revogados. O histórico e os saldos serão mantidos.`,
+      )
+    )
+      return;
+    setRemoving(`${group.id}:${personId}`);
+    setRemoveError('');
+    try {
+      removeGroupMember(data, group.id, personId);
+      if (user && !localMode) {
+        const repository = await import('../../infrastructure/firebase/groupSharingRepository.js');
+        await repository.removeMemberAccess(group.id, personId);
+      }
+      setData((current) => removeGroupMember(current, group.id, personId));
+      if (editingId === group.id) resetGroup();
+      notify?.(`${name} foi removido do grupo. O histórico e os saldos anteriores foram mantidos.`);
+    } catch (error) {
+      setRemoveError(
+        error.code
+          ? 'Não foi possível revogar o acesso. Confira a conexão e publique as regras atualizadas do Firestore antes de tentar novamente.'
+          : error.message,
+      );
+    } finally {
+      setRemoving('');
+    }
+  }
+  async function removeGroup(group, retry = false) {
+    if (
+      !retry &&
+      !window.confirm(
+        `Excluir o grupo ${group.name}? Todos os convites e acessos serão bloqueados. As despesas, os repasses e os saldos ficam preservados somente para consulta no histórico.`,
+      )
+    )
+      return;
+    setRemoving(`group:${group.id}`);
+    setRemoveError('');
+    try {
+      let cleanupPending = false;
+      if (user && !localMode) {
+        const repository = await import('../../infrastructure/firebase/groupSharingRepository.js');
+        ({ cleanupPending } = await repository.removeSharedGroup(group.id));
+      }
+      if (!retry) setData((current) => deleteGroup(current, group.id));
+      if (editingId === group.id) resetGroup();
+      notify?.(
+        cleanupPending
+          ? 'Grupo excluído e acesso bloqueado. A limpeza da lista de convites está pendente; use Atualizar revogação no histórico para tentar novamente.'
+          : 'Grupo excluído. Histórico financeiro preservado e acessos revogados.',
+      );
+    } catch (error) {
+      setRemoveError(
+        error.code
+          ? 'Não foi possível bloquear o acesso ao grupo. Confira a conexão e publique as regras atualizadas do Firestore.'
+          : error.message,
+      );
+    } finally {
+      setRemoving('');
+    }
+  }
+  async function eraseHistory() {
+    const group = purgeTarget;
+    setRemoving(`purge:${group.id}`);
+    setPurgeError('');
+    const receipts = [
+      ...new Set([
+        ...(group.purgeReceiptIds || []),
+        ...data.settlements
+          .filter((item) => item.scope === `group:${group.id}` && item.receipt)
+          .map((item) => item.receipt.id),
+      ]),
+    ];
+    try {
+      if (user && !localMode) {
+        const repository = await import('../../infrastructure/firebase/groupSharingRepository.js');
+        await repository.removeSharedGroup(group.id);
+        await repository.eraseSharedGroupHistory(group.id);
+      }
+      let next;
+      do {
+        next = await commitData((current) => purgeGroupHistoryBatch(current, group.id));
+      } while (next.groups.some((item) => item.id === group.id));
+      const cleanup = await Promise.allSettled(
+        receipts.map((id) => removeReceipt(id, user?.uid || 'local')),
+      );
+      setPurgeTarget(null);
+      notify?.(
+        cleanup.some((item) => item.status === 'rejected')
+          ? 'Histórico apagado. Alguns arquivos locais de comprovantes não puderam ser removidos.'
+          : 'Histórico do grupo apagado definitivamente. Pessoas, rendas e outros grupos foram mantidos.',
+      );
+    } catch (error) {
+      setPurgeError(
+        error.code
+          ? 'A limpeza não foi concluída. Confira a conexão e publique as regras atualizadas do Firestore; depois tente novamente. Etapas já confirmadas não serão refeitas.'
+          : `${error.message} Você pode tentar novamente para continuar a limpeza.`,
+      );
+    } finally {
+      setRemoving('');
+    }
   }
   return (
     <>
@@ -139,7 +269,11 @@ export function GroupsPanel({ data, setData, notify }) {
               />
             </label>
             <fieldset className="group-members-fieldset">
-              <legend>Participantes · selecione pelo menos 2</legend>
+              <legend>
+                {editingId
+                  ? 'Participantes ativos · adicione ou reative pessoas'
+                  : 'Participantes · selecione pelo menos 2'}
+              </legend>
               {people.length ? (
                 <div className="group-member-options">
                   {people.map((person) => (
@@ -152,11 +286,18 @@ export function GroupsPanel({ data, setData, notify }) {
                       <input
                         type="checkbox"
                         checked={memberIds.includes(person.id)}
-                        disabled={Boolean(editing?.memberIds.includes(person.id))}
+                        disabled={
+                          activeGroupMembers(editing).includes(person.id) || Boolean(removing)
+                        }
                         onChange={() => toggleMember(person.id)}
                       />
                       <span>{person.name}</span>
-                      {editing?.memberIds.includes(person.id) && <small>Já participa</small>}
+                      {activeGroupMembers(editing).includes(person.id) && (
+                        <small>Já participa</small>
+                      )}
+                      {editing?.removedMemberIds?.includes(person.id) && (
+                        <small>Reativar participante</small>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -166,8 +307,9 @@ export function GroupsPanel({ data, setData, notify }) {
             </fieldset>
             {editingId && (
               <p className="hint">
-                Você pode mudar o nome e adicionar participantes. Os membros existentes são mantidos
-                para preservar o histórico.
+                Você pode mudar o nome, adicionar ou reativar participantes. Para remover alguém,
+                use Remover na lista do grupo abaixo. A reativação exige um novo convite para
+                devolver o acesso.
               </p>
             )}
             {groupError && (
@@ -181,7 +323,10 @@ export function GroupsPanel({ data, setData, notify }) {
                   Cancelar edição
                 </button>
               )}
-              <button className="button primary" disabled={people.length < 2}>
+              <button
+                className="button primary"
+                disabled={Boolean(removing) || (!editingId && people.length < 2)}
+              >
                 {editingId ? 'Salvar grupo' : 'Criar grupo'}
               </button>
             </div>
@@ -221,6 +366,11 @@ export function GroupsPanel({ data, setData, notify }) {
         <h2>
           Grupos cadastrados <span className="pill">{groups.length}</span>
         </h2>
+        {removeError && (
+          <p className="notice error" role="alert">
+            {removeError}
+          </p>
+        )}
         {groups.length ? (
           <div className="groups-grid">
             {groups.map((group) => (
@@ -228,23 +378,58 @@ export function GroupsPanel({ data, setData, notify }) {
                 <div className="section-heading">
                   <div>
                     <h3>{group.name}</h3>
-                    <small>{group.memberIds.length} participantes</small>
+                    <small>{activeGroupMembers(group).length} participante(s) ativo(s)</small>
                   </div>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    onClick={() => editGroup(group)}
-                  >
-                    Editar grupo
-                  </button>
+                  <div className="actions">
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => editGroup(group)}
+                      disabled={Boolean(removing)}
+                    >
+                      Editar grupo
+                    </button>
+                    <button
+                      type="button"
+                      className="button danger"
+                      disabled={Boolean(removing)}
+                      onClick={() => removeGroup(group)}
+                    >
+                      {removing === `group:${group.id}` ? 'Excluindo…' : 'Excluir grupo'}
+                    </button>
+                  </div>
                 </div>
                 <ul className="group-member-chips">
                   {group.memberIds.map((id) => (
-                    <li className="pill" key={id}>
+                    <li
+                      className={
+                        'group-participant ' +
+                        (group.removedMemberIds?.includes(id) ? 'removed' : '')
+                      }
+                      key={id}
+                    >
                       {people.find((person) => person.id === id)?.name || 'Pessoa cadastrada'}
+                      {group.removedMemberIds?.includes(id) ? (
+                        <small>Removido · histórico mantido</small>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-button"
+                          disabled={Boolean(removing) || activeGroupMembers(group).length <= 1}
+                          aria-label={`Remover ${people.find((person) => person.id === id)?.name} de ${group.name}`}
+                          onClick={() => removeMember(group, id)}
+                        >
+                          {removing === `${group.id}:${id}` ? 'Removendo…' : 'Remover'}
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
+                {activeGroupMembers(group).length === 1 && (
+                  <p className="hint">
+                    Mantenha pelo menos um participante ativo para continuar usando o grupo.
+                  </p>
+                )}
               </article>
             ))}
           </div>
@@ -252,6 +437,83 @@ export function GroupsPanel({ data, setData, notify }) {
           <div className="empty">Crie um grupo para dividir contas entre duas ou mais pessoas.</div>
         )}
       </section>
+      {archivedGroups.length > 0 && (
+        <section className="panel">
+          <p className="eyebrow">HISTÓRICO PRESERVADO</p>
+          <h2>
+            Grupos excluídos <span className="pill">{archivedGroups.length}</span>
+          </h2>
+          <p className="muted">
+            Grupos excluídos ficam disponíveis somente para consulta. Pessoas, despesas e repasses
+            anteriores não são apagados.
+          </p>
+          <ul className="sharing-record-list">
+            {archivedGroups.map((group) => (
+              <li key={group.id} className="sharing-record">
+                <div className="sharing-record-info">
+                  <strong>{group.name}</strong>
+                  <span>
+                    {group.purging
+                      ? 'Exclusão definitiva em andamento · retome para concluir'
+                      : 'Excluído · somente consulta'}
+                  </span>
+                </div>
+                <div className="actions">
+                  <button
+                    className="button secondary"
+                    disabled={Boolean(removing) || group.purging}
+                    onClick={() => onViewGroup?.(group.id)}
+                  >
+                    Consultar histórico
+                  </button>
+                  {user && !localMode && (
+                    <button
+                      className="button secondary"
+                      disabled={Boolean(removing)}
+                      onClick={() => removeGroup(group, true)}
+                    >
+                      Atualizar revogação
+                    </button>
+                  )}
+                  <button
+                    className="button danger"
+                    disabled={Boolean(removing)}
+                    onClick={() => {
+                      setPurgeTarget({
+                        ...group,
+                        purgeReceiptIds: [
+                          ...new Set([
+                            ...(group.purgeReceiptIds || []),
+                            ...data.settlements
+                              .filter((item) => item.scope === `group:${group.id}` && item.receipt)
+                              .map((item) => item.receipt.id),
+                          ]),
+                        ],
+                      });
+                      setPurgeError('');
+                    }}
+                  >
+                    {group.purging
+                      ? 'Continuar apagando histórico'
+                      : 'Apagar histórico definitivamente'}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {purgeTarget && (
+        <PurgeGroupDialog
+          group={purgeTarget}
+          count={groupHistoryCount(data, purgeTarget.id)}
+          busy={Boolean(removing)}
+          error={purgeError}
+          onClose={() => setPurgeTarget(null)}
+          onConfirm={eraseHistory}
+          onExport={onExport}
+        />
+      )}
     </>
   );
 }

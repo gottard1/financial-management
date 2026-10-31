@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recurringCandidates, copyRecurringExpenses } from './recurringExpenses.js';
+import {
+  recurringCandidates,
+  copyRecurringExpenses,
+  recurrenceLabel,
+} from './recurringExpenses.js';
 import { migrateData } from '../budget/workspaceCalculations.js';
+import { encodeFinance, decodeFinance } from '../budget/financeCloudCodec.js';
 
 const expense = (patch = {}) => ({
   id: 'electricity',
@@ -20,6 +25,110 @@ const expense = (patch = {}) => ({
 });
 const scope = 'person:person-0';
 const entry = (amount, selected = true) => ({ electricity: { amount, selected } });
+
+test('supports 420 mortgage installments of R$ 978 without dividing the monthly amount', () => {
+  const mortgage = expense({
+    description: 'Financiamento da casa',
+    amount: 97800,
+    fixedAmountType: 'fixed',
+    installments: { total: 420, current: 360 },
+  });
+  const data = migrateData({ ...migrateData(null), expenses: [mortgage] });
+  const [next] = copyRecurringExpenses(
+    data.expenses,
+    scope,
+    '2026-02',
+    entry('978'),
+    () => 'mortgage-361',
+  );
+  assert.deepEqual(next.installments, { total: 420, current: 361 });
+  assert.equal(next.amount, 97800);
+  assert.equal(mortgage.installments.current, 360);
+  assert.deepEqual(
+    recurringCandidates(
+      [expense({ installments: { total: 420, current: 420 } })],
+      scope,
+      '2026-02',
+    ),
+    [],
+  );
+});
+
+test('six installments span exactly six occurrences including the original, then stop', () => {
+  const original = expense({ fixedAmountType: 'fixed', installments: { total: 6, current: 1 } });
+  const history = [original];
+  for (let number = 2; number <= 6; number += 1) {
+    const month = `2026-${String(number).padStart(2, '0')}`;
+    const previous = history.at(-1);
+    const copies = copyRecurringExpenses(
+      history,
+      scope,
+      month,
+      { [previous.id]: { selected: true, amount: '150' } },
+      () => `part-${number}`,
+    );
+    history.push(...copies);
+    assert.equal(copies[0].installments.current, number);
+    assert.equal(copies[0].installments.total, 6);
+    assert.equal(copies[0].amount, 15000);
+    assert.equal(copies[0].originId, original.id);
+    assert.equal(recurringCandidates(history, scope, month).length, 0);
+  }
+  assert.equal(history.length, 6);
+  assert.equal(original.installments.current, 1);
+  assert.deepEqual(recurringCandidates(history, scope, '2026-07'), []);
+  assert.throws(() =>
+    copyRecurringExpenses(history, scope, '2026-07', {
+      'part-6': { selected: true, amount: '150' },
+    }),
+  );
+  assert.equal(recurrenceLabel(history.at(-1)), 'Parcela 6 de 6 · última');
+});
+test('supports an intermediate starting installment and a single-installment purchase', () => {
+  const partial = expense({ installments: { total: 6, current: 3 } });
+  const [next] = copyRecurringExpenses([partial], scope, '2026-02', entry('150'));
+  assert.deepEqual(next.installments, { total: 6, current: 4 });
+  assert.deepEqual(
+    recurringCandidates([expense({ installments: { total: 1, current: 1 } })], scope, '2026-02'),
+    [],
+  );
+});
+test('validates installment limits and preserves finite recurrence in backups and private cloud data', () => {
+  const data = migrateData(null);
+  const finite = expense({ installments: { total: 6, current: 2 } });
+  const restored = migrateData(JSON.parse(JSON.stringify({ ...data, expenses: [finite] })));
+  assert.deepEqual(restored.expenses[0].installments, { total: 6, current: 2 });
+  const encoded = encodeFinance(restored);
+  const cloud = decodeFinance([
+    {
+      id: 'state',
+      schemaVersion: 2,
+      revision: 1,
+      recordCount: encoded.records.length,
+      orders: encoded.orders,
+    },
+    ...encoded.records.map((record) => ({ ...record, revision: 1 })),
+  ]);
+  assert.deepEqual(cloud.data.expenses[0].installments, { total: 6, current: 2 });
+  for (const installments of [
+    null,
+    [],
+    { total: 0, current: 1 },
+    { total: Number.MAX_SAFE_INTEGER + 1, current: 1 },
+    { total: 6, current: 7 },
+    { total: 6, current: 0 },
+    { total: 6.5, current: 1 },
+    { total: 6, current: 1.5 },
+    { total: '6', current: 1 },
+  ])
+    assert.throws(() => migrateData({ ...data, expenses: [expense({ installments })] }));
+  assert.throws(() =>
+    migrateData({
+      ...data,
+      expenses: [expense({ fixed: false, installments: { total: 6, current: 1 } })],
+    }),
+  );
+});
 
 test('copies variable monthly value without modifying history, IDs or allocation rules', () => {
   const original = expense();

@@ -34,6 +34,8 @@ As regras não permitem que outro integrante de grupo consulte a área privada d
 
 ### Comparação mensal
 
+As despesas podem ter `installments: { total, current }` quando forem compras parceladas. O total aceita inteiros positivos representáveis com segurança, sem um teto comercial de 360 parcelas, e inclui a parcela atual. Financiamentos longos, como 420 parcelas de R$ 978, mantêm R$ 978 como o valor mensal. A cópia mensal incrementa `current`, preserva o ID de origem e encerra a oferta de cópia quando `current === total`. O valor informado é o de cada parcela, sem dividir novamente pelo total. Esses campos opcionais acompanham o backup, a sincronização privada e a projeção compartilhada. Não há criação automática de lançamentos futuros; a comparação mensal mostra somente os meses já lançados.
+
 Abra **Comparar meses** no menu principal. O espaço Individual usa gastos pessoais mais a parte do participante nos grupos administrados nesse conjunto de dados; o espaço Grupo usa somente as despesas do grupo selecionado. O intervalo aceita de 1 a 24 meses e oferece atalhos de 6 e 12 meses terminando no mês de referência.
 
 O gráfico e as tabelas exibem renda em dinheiro, despesas pagas e pendentes, média e diferença entre os dois últimos meses do intervalo, além da distribuição por categoria. Os gastos seguem o vencimento, não a data do repasse; repasses não são somados novamente como despesas. Benefícios VA/VR não são somados à renda em dinheiro. Meses sem registros contam como zero. Meses com rateio proporcional sem renda suficiente são marcados para revisão e excluídos dos totais, sem inventar um gasto zero.
@@ -51,13 +53,47 @@ A área de acesso está separada em **Convidar e gerenciar** (formulário, convi
 
 ### Comportamento e limites
 
-- O e-mail é opcional para participantes; sem convite aceito não há acesso compartilhado. O administrador pode alterar o e-mail ou cancelar um convite pendente. Vínculos aceitos são imutáveis nesta versão.
-- O participante consulta despesas, sua parte, saldo após repasses e histórico de repasses por competência. Os lançamentos são gerenciados pelo administrador. Os grupos recebidos aparecem em **Pessoas e grupos**, separados dos espaços locais.
-- O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas do grupo com rateio calculado e repasses. Não recebe rendas, perfis de renda, despesas individuais, e-mails dos demais convidados, notas ou arquivos/metadados de comprovantes.
+- O e-mail é opcional para participantes; sem convite aceito não há acesso compartilhado. O administrador pode alterar o e-mail ou cancelar um convite pendente. O participante vinculado não é trocado por outro cadastro; o administrador pode remover a pessoa do grupo para revogar esse acesso.
+- O participante consulta despesas, sua parte, saldo após repasses e histórico de repasses por competência. Os lançamentos são gerenciados pelo administrador. Os grupos recebidos aparecem também no seletor do espaço **Grupo**. A Visão geral mostra os mesmos totais mensais, orçamento, benefícios agregados, participantes e acertos do administrador, em modo de consulta.
+- O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas do grupo com rateio calculado e repasses. Inclui resumos mensais com renda total do grupo, benefícios agregados, aportes, orçamento e acertos; não inclui rendas individualizadas, perfis de renda, despesas individuais, e-mails dos demais convidados, notas ou arquivos/metadados de comprovantes.
 - As alterações do administrador são publicadas com atraso de 700 ms enquanto o aplicativo está aberto. Falhas geram aviso e podem ser retomadas com **Atualizar dados compartilhados**. O primeiro convite também publica o histórico existente.
 - O estado completo do administrador é sincronizado pela área privada da própria conta. A projeção compartilhada permanece separada e não expõe esse estado aos convidados. Revisões transacionais evitam sobrescrever uma publicação concorrente sem aviso.
 - Aceite e associação são gravados atomicamente. As regras exigem e-mail verificado, convite pendente para aquele endereço e correspondência entre grupo, participante e UID.
 - O snapshot é um documento Firestore, sujeito ao limite de tamanho por documento. Não há upload de arquivos nesta etapa.
+
+Para grupos publicados antes da integração com a Visão geral, o administrador deve usar **Atualizar dados compartilhados** uma vez após atualizar o aplicativo. Esta integração não exige novas regras nem índices além dos já previstos neste projeto.
+
+### Excluir grupos
+
+Em **Pessoas e grupos → Grupos cadastrados**, use **Excluir grupo** e confirme. A exclusão é lógica: o grupo recebe `deleted: true`, sai dos grupos ativos e fica em **Grupos excluídos**, com acesso somente ao histórico. Despesas, repasses, rendas, pessoas, orçamentos, metas e aportes permanecem no conjunto privado da conta. Os gastos históricos continuam entrando nos resumos individuais, sem recalcular ou duplicar registros por causa da exclusão.
+
+O administrador pode consultar as despesas, os repasses, os saldos, o orçamento, as metas e os aportes do grupo excluído, além da comparação mensal. Não há novos lançamentos ou reativação de grupos excluídos nesta versão. A exclusão é permitida mesmo quando resta apenas um participante.
+
+O Firestore recebe primeiro um marcador de exclusão permanente em `sharedGroups`, que bloqueia leituras dos convidados e novos aceites imediatamente. Convites são marcados como revogados e associações são removidas em lotes. Se a limpeza falhar, os acessos continuam bloqueados e o botão **Atualizar revogação** permite tentar novamente. Grupos ainda não publicados também recebem esse marcador para impedir republicação por uma sessão antiga. As regras não permitem remover o marcador ou voltar `deleted` para `false`.
+
+Publique novamente o conteúdo completo de `firestore.rules` para permitir o campo `deleted`, bloquear acesso a grupos excluídos e autorizar a limpeza dos vínculos. Não são necessários novos índices para esta alteração.
+
+### Apagar o histórico definitivamente
+
+Na lista **Grupos excluídos**, clique em **Apagar histórico definitivamente**, revise o aviso e digite **APAGAR**. É possível exportar um backup antes de confirmar. A operação remove despesas e parcelas já lançadas, repasses, orçamentos, metas e aportes daquele grupo. Os totais individuais e a comparação mensal passam a desconsiderar os lançamentos apagados. Pessoas, rendas, benefícios e registros de outros grupos são mantidos.
+
+O conteúdo financeiro da projeção compartilhada é eliminado e convites e associações são fisicamente removidos. Permanece somente um documento pequeno de bloqueio em `sharedGroups`, sem nome original, participantes, despesas ou repasses, para impedir que uma sessão antiga recrie o grupo.
+
+O histórico privado é removido em etapas de até 300 registros, com confirmação de cada transação antes da seguinte. A contribuição de uma meta é apagada antes da meta para não deixar referências órfãs. Enquanto houver dados a limpar, o grupo fica marcado como `purging`; após uma interrupção, use **Continuar apagando histórico**. O aplicativo só confirma conclusão após o Firestore confirmar as gravações. Essa operação exige conexão quando a sincronização está ativa.
+
+Comprovantes disponíveis no navegador atual são removidos depois da confirmação dos dados; arquivos que permanecerem em outros dispositivos e backups já exportados não são apagados remotamente. Em modo local, a exclusão afeta somente o navegador atual.
+
+É necessário republicar `firestore.rules`: dentro de `match /groupInvites/{id}`, o administrador pode apagar também convites aceitos/revogados quando o grupo já estiver excluído. A exclusão permanente não exige índices novos.
+
+### Remover ou reativar participantes
+
+Em **Pessoas e grupos → Grupos cadastrados**, use **Remover** ao lado da pessoa e confirme. Despesas, repasses, rendas e saldos anteriores são preservados; a pessoa fica identificada como removida no histórico. Os novos lançamentos e convites usam somente os participantes ativos. Contas recorrentes que ainda incluem uma pessoa removida não são copiadas automaticamente: cadastre uma nova recorrência com os participantes atuais para preservar os rateios anteriores.
+
+Em contas autenticadas, a remoção requer conexão com o Firestore: primeiro é atualizada a lista pública de ativos, o convite pendente é cancelado ou o convite aceito é marcado como revogado, e o vínculo de acesso é excluído na mesma transação. Se isso falhar, a remoção local não é aplicada. O cadastro da conta do convidado e seus dados privados não são excluídos. Mesmo que exista um vínculo antigo em cache, as regras consultam o estado atual de acesso antes de permitir novas leituras.
+
+Para reativar, abra **Editar grupo**, selecione a pessoa marcada como **Reativar participante** e salve. Ela volta a participar de novos lançamentos, mas precisa de um novo convite e aceite para recuperar o acesso. Não é possível remover o último participante ativo. O proprietário da conta que administra o grupo mantém seu papel de administrador, independentemente de sua participação financeira.
+
+Publique novamente `firestore.rules` antes de usar a remoção em produção; versões anteriores não autorizam a revogação de vínculos aceitos.
 
 ### Validação local das permissões
 

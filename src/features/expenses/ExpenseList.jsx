@@ -1,4 +1,5 @@
 import React from 'react';
+import { recurrenceLabel } from '../../domain/expenses/recurringExpenses.js';
 import { money, splitExpense } from '../../domain/expenses/expenseCalculations.js';
 
 const splitLabels = {
@@ -175,11 +176,7 @@ export function ExpenseList({
                       <br />
                       <small>
                         {item.date} · {item.expense.category}
-                        {item.expense.fixed
-                          ? item.expense.fixedAmountType === 'variable'
-                            ? ' · Recorrente variável'
-                            : ' · Recorrente fixa'
-                          : ''}
+                        {item.expense.fixed ? ` · ${recurrenceLabel(item.expense)}` : ''}
                       </small>
                     </td>
                     <td>{money(item.expense.amount)}</td>
@@ -214,11 +211,7 @@ export function ExpenseList({
                 <div className="expense-mobile-meta">
                   <span>
                     Vence em {item.date} · {item.expense.category}
-                    {item.expense.fixed
-                      ? item.expense.fixedAmountType === 'variable'
-                        ? ' · Recorrente variável'
-                        : ' · Recorrente fixa'
-                      : ''}
+                    {item.expense.fixed ? ` · ${recurrenceLabel(item.expense)}` : ''}
                   </span>
                   <ExpenseStatus status={item.expense.status} />
                 </div>

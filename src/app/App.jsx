@@ -1,4 +1,5 @@
 import { useFinanceData } from '../hooks/useFinanceData.js';
+import { useSharedMemberships } from '../hooks/useSharedMemberships.js';
 import { AppSidebar } from '../components/layout/AppSidebar.jsx';
 import { WorkspaceSelector } from '../components/layout/WorkspaceSelector.jsx';
 import { MonthlySummary } from '../features/overview/MonthlySummary.jsx';
@@ -18,15 +19,22 @@ import { IncomePanel } from '../features/income/IncomePanel.jsx';
 import { BudgetPanel } from '../features/budget/BudgetPanel.jsx';
 import { SavingsPanel } from '../features/savings/SavingsPanel.jsx';
 import { GroupsPanel } from '../features/groups/GroupsPanel.jsx';
+import { ArchivedGroupHistory } from '../features/groups/ArchivedGroupHistory.jsx';
 import { SettlementsPanel } from '../features/settlements/SettlementsPanel.jsx';
 import { MonthlyComparisonPanel } from '../features/comparison/MonthlyComparisonPanel.jsx';
 import { FinanceSyncStatus } from '../features/sync/FinanceSyncStatus.jsx';
+import { activeGroupMembers } from '../domain/groups/groupMembers.js';
 import { AuthScreen } from '../features/auth/AuthScreen.jsx';
 import { useAuth } from '../features/auth/AuthProvider.jsx';
 const monthNow = () => new Date().toLocaleDateString('sv-SE').slice(0, 7);
 const GroupSharingPanel = React.lazy(() =>
   import('../features/groups/GroupSharingPanel.jsx').then((module) => ({
     default: module.GroupSharingPanel,
+  })),
+);
+const SharedGroupView = React.lazy(() =>
+  import('../features/groups/GroupSharingPanel.jsx').then((module) => ({
+    default: module.SharedGroupView,
   })),
 );
 export function App() {
@@ -44,6 +52,7 @@ export function App() {
 
 function FinanceApp({ storageNamespace }) {
   const { user, localMode, signOut } = useAuth();
+  const { groups: sharedGroups, error: sharingError } = useSharedMemberships(user, localMode);
   const {
     data,
     setData,
@@ -55,23 +64,30 @@ function FinanceApp({ storageNamespace }) {
     syncError,
     retrySync,
     useCloudVersion,
+    commitData,
   } = useFinanceData(storageNamespace);
   const [month, setMonth] = useState(monthNow),
     [tab, setTab] = useState('overview'),
     [mode, setMode] = useState('individual'),
     [personId, setPerson] = useState(() => data.people[0].id),
-    [groupId, setGroupId] = useState(() => data.groups[0]?.id || ''),
+    [groupId, setGroupId] = useState(() => data.groups.find((group) => !group.deleted)?.id || ''),
     [draft, setDraft] = useState(null),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
     [filter, setFilter] = useState('all');
   const dialog = useRef();
+  const sharedGroup = mode === 'group' && sharedGroups.find((item) => item.id === groupId);
   const [recurringDraft, setRecurringDraft] = useState(null);
-  const group = data.groups.find((item) => item.id === groupId) || data.groups[0];
+  const group =
+    data.groups.find((item) => item.id === groupId) || data.groups.find((item) => !item.deleted);
+  const archivedGroup = mode === 'group' && group?.deleted;
   const person = data.people.some((item) => item.id === personId) ? personId : data.people[0].id;
-  const selectedGroupId = group?.id || '';
+  const selectedGroupId = sharedGroup?.id || group?.id || sharedGroups[0]?.id || '';
+  const selectedSharedGroup =
+    mode === 'group' && sharedGroups.find((item) => item.id === selectedGroupId);
   const scope = mode === 'group' ? (group ? 'group:' + group.id : '') : 'person:' + person;
   const memberIds = mode === 'group' ? group?.memberIds || [] : [person];
+  const activeMemberIds = mode === 'group' ? activeGroupMembers(group) : [person];
   const incomes = data.months[month] || {};
   const profiles = data.incomeConfigs[month] || {};
   const expenses = data.expenses.filter((e) => e.date.startsWith(month) && e.workspace === scope);
@@ -101,6 +117,10 @@ function FinanceApp({ storageNamespace }) {
     setError('');
   }
   function newExpense() {
+    if (archivedGroup) {
+      setError('Este grupo foi excluído e está disponível apenas para consulta.');
+      return;
+    }
     setError('');
     if (!scope) {
       setTab('groups');
@@ -112,10 +132,10 @@ function FinanceApp({ storageNamespace }) {
       category: 'Moradia',
       date: month + '-01',
       split: mode === 'group' ? 'proportional' : 'equal',
-      participants: [...memberIds],
+      participants: [...activeMemberIds],
       percentages: {},
       status: 'pending',
-      payer: memberIds.includes(person) ? person : memberIds[0],
+      payer: activeMemberIds.includes(person) ? person : activeMemberIds[0],
       fixed: false,
       fixedAmountType: 'fixed',
       workspace: scope,
@@ -124,8 +144,17 @@ function FinanceApp({ storageNamespace }) {
   function saveExpense(e) {
     e.preventDefault();
     try {
+      if (archivedGroup) throw new Error('Não é possível alterar despesas de um grupo excluído.');
       const item = {
         ...draft,
+        ...(draft.installments
+          ? {
+              installments: {
+                total: Number(draft.installments.total),
+                current: Number(draft.installments.current),
+              },
+            }
+          : {}),
         description: draft.description.trim(),
         amount: parseMoney(draft.amount),
         percentages: Object.fromEntries(
@@ -136,6 +165,12 @@ function FinanceApp({ storageNamespace }) {
         throw Error('Informe uma descrição e um valor maior que zero.');
       if (!item.date.startsWith(month)) throw Error('A data deve pertencer ao mês selecionado.');
       splitExpense(item, incomes, memberIds);
+      if (
+        !draft.id &&
+        (item.participants.some((id) => !activeMemberIds.includes(id)) ||
+          !activeMemberIds.includes(item.payer))
+      )
+        throw new Error('Novas despesas devem usar apenas participantes ativos do grupo.');
       item.id = item.id || crypto.randomUUID();
       setData((d) => ({ ...d, expenses: [...d.expenses.filter((x) => x.id !== item.id), item] }));
       close();
@@ -163,7 +198,18 @@ function FinanceApp({ storageNamespace }) {
   }
 
   function copyFixed() {
-    const items = recurringCandidates(data.expenses, scope, month);
+    if (archivedGroup) {
+      setError('Não é possível copiar contas para um grupo excluído.');
+      return;
+    }
+    const items = recurringCandidates(data.expenses, scope, month).map((item) => ({
+      ...item,
+      unavailableReason:
+        item.participants.some((id) => !activeMemberIds.includes(id)) ||
+        !activeMemberIds.includes(item.payer)
+          ? 'Inclui um participante removido. Cadastre uma nova despesa recorrente com os participantes atuais.'
+          : '',
+    }));
     if (!items.length) {
       setNotice('Nenhuma conta recorrente nova encontrada no mês anterior neste espaço.');
       return;
@@ -178,7 +224,19 @@ function FinanceApp({ storageNamespace }) {
         recurringDraft.scope,
         recurringDraft.month,
         entries,
+        undefined,
+        recurringDraft.scope.startsWith('group:')
+          ? activeGroupMembers(
+              current.groups.find((item) => `group:${item.id}` === recurringDraft.scope),
+            )
+          : undefined,
       );
+      if (
+        current.groups.some(
+          (group) => group.deleted && `group:${group.id}` === recurringDraft.scope,
+        )
+      )
+        throw new Error('Não é possível adicionar parcelas a um grupo excluído.');
       count = copies.length;
       return { ...current, expenses: [...current.expenses, ...copies] };
     });
@@ -288,25 +346,29 @@ function FinanceApp({ storageNamespace }) {
             {...{ mode, setMode, person, setPerson, setGroupId, tab }}
             groupId={selectedGroupId}
             people={data.people}
-            groups={data.groups}
+            groups={[...data.groups, ...sharedGroups]}
             onClearError={() => setError('')}
           />
-          {mode === 'group' && group && tab !== 'people' && tab !== 'groups' && (
-            <nav className="group-subnav" aria-label="Seções do grupo">
-              <button
-                className={'button ' + (tab === 'overview' ? 'primary' : 'secondary')}
-                onClick={() => go('overview')}
-              >
-                Visão do grupo
-              </button>
-              <button
-                className={'button ' + (tab === 'settlements' ? 'primary' : 'secondary')}
-                onClick={() => go('settlements')}
-              >
-                Repasses e comprovantes
-              </button>
-            </nav>
-          )}
+          {mode === 'group' &&
+            group &&
+            !selectedSharedGroup &&
+            tab !== 'people' &&
+            tab !== 'groups' && (
+              <nav className="group-subnav" aria-label="Seções do grupo">
+                <button
+                  className={'button ' + (tab === 'overview' ? 'primary' : 'secondary')}
+                  onClick={() => go('overview')}
+                >
+                  Visão do grupo
+                </button>
+                <button
+                  className={'button ' + (tab === 'settlements' ? 'primary' : 'secondary')}
+                  onClick={() => go('settlements')}
+                >
+                  Repasses e comprovantes
+                </button>
+              </nav>
+            )}
           {notice && (
             <div className="notice" role="status">
               <span>{notice}</span>
@@ -318,6 +380,11 @@ function FinanceApp({ storageNamespace }) {
           {(error || storageError) && !draft && (
             <p role="alert" className="notice error">
               {error || storageError}
+            </p>
+          )}
+          {sharingError && (
+            <p role="alert" className="notice error">
+              {sharingError}
             </p>
           )}
           {blocked && (
@@ -348,7 +415,24 @@ function FinanceApp({ storageNamespace }) {
               notify={setNotice}
             />
           ) : tab === 'groups' ? (
-            <GroupsPanel {...{ data, setData }} notify={setNotice} />
+            <GroupsPanel
+              {...{ data, setData, commitData }}
+              notify={setNotice}
+              onExport={exportData}
+              onViewGroup={(id) => {
+                setGroupId(id);
+                setMode('group');
+                setTab('overview');
+              }}
+            />
+          ) : selectedSharedGroup ? (
+            <React.Suspense fallback={<p role="status">Carregando grupo…</p>}>
+              <SharedGroupView
+                key={selectedSharedGroup.id}
+                membership={selectedSharedGroup.membership}
+                referenceMonth={month}
+              />
+            </React.Suspense>
           ) : mode === 'group' && !group ? (
             <section className="panel empty">
               <h2>Crie seu primeiro grupo</h2>
@@ -360,6 +444,8 @@ function FinanceApp({ storageNamespace }) {
                 Criar grupo
               </button>
             </section>
+          ) : archivedGroup ? (
+            <ArchivedGroupHistory {...{ data, group, month, stats, tab }} error={statsError} />
           ) : (
             <>
               {statsError && (
@@ -440,7 +526,7 @@ function FinanceApp({ storageNamespace }) {
           </footer>
         </div>
       </main>
-      {recurringDraft && !blocked && (
+      {recurringDraft && !blocked && !archivedGroup && (
         <RecurringExpensesDialog
           items={recurringDraft.items}
           month={recurringDraft.month}
@@ -448,7 +534,7 @@ function FinanceApp({ storageNamespace }) {
           onSave={saveRecurring}
         />
       )}
-      {draft && !blocked && (
+      {draft && !blocked && !archivedGroup && (
         <ExpenseDialog
           {...{
             dialog,
@@ -457,11 +543,11 @@ function FinanceApp({ storageNamespace }) {
             draft,
             setDraft,
             data,
-            memberIds,
             preview,
             previewError,
             error,
           }}
+          memberIds={draft.id ? memberIds : activeMemberIds}
         />
       )}
     </div>

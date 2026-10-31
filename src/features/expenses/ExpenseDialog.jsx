@@ -23,6 +23,18 @@ export function ExpenseDialog({
   const shared = draft.workspace.startsWith('group:');
   const nameOf = (id) => data.people.find((person) => person.id === id)?.name || 'Pessoa';
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  function setRecurring(enabled) {
+    setDraft((current) => {
+      const { installments, ...rest } = current;
+      return enabled ? { ...current, fixed: true } : { ...rest, fixed: false };
+    });
+  }
+  function setDuration(value) {
+    setDraft((current) => {
+      const { installments, ...rest } = current;
+      return value === 'limited' ? { ...current, installments: { total: 6, current: 1 } } : rest;
+    });
+  }
   function changeSplit(value) {
     setDraft((current) => ({
       ...current,
@@ -83,7 +95,7 @@ export function ExpenseDialog({
               />
             </label>
             <label className="field">
-              Valor total (R$)
+              {draft.installments ? 'Valor desta parcela (R$)' : 'Valor total (R$)'}
               <input
                 required
                 inputMode="decimal"
@@ -114,12 +126,69 @@ export function ExpenseDialog({
             <input
               type="checkbox"
               checked={draft.fixed}
-              onChange={(e) => update('fixed', e.target.checked)}
+              onChange={(e) => setRecurring(e.target.checked)}
             />
             Conta recorrente · se repete todos os meses
           </label>
           {draft.fixed && (
             <div className="recurring-options">
+              <label className="field">
+                Por quanto tempo esta conta se repete?
+                <select
+                  value={draft.installments ? 'limited' : 'unlimited'}
+                  onChange={(event) => setDuration(event.target.value)}
+                >
+                  <option value="unlimited">Sem prazo definido · conta mensal</option>
+                  <option value="limited">Número de parcelas · compra ou financiamento</option>
+                </select>
+              </label>
+              {draft.installments && (
+                <>
+                  <div className="form-grid">
+                    <label className="field">
+                      Quantidade de parcelas
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        max={Number.MAX_SAFE_INTEGER}
+                        placeholder="Ex.: 6, 48, 420"
+                        step="1"
+                        value={draft.installments.total}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            installments: { ...current.installments, total: event.target.value },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      Parcela deste mês
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        max={draft.installments.total || Number.MAX_SAFE_INTEGER}
+                        step="1"
+                        value={draft.installments.current}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            installments: { ...current.installments, current: event.target.value },
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <p className="hint">
+                    Informe acima o valor de uma parcela, não o total da compra. Ex.: um
+                    financiamento de 420 parcelas de R$ 978 registra R$ 978 por mês. Ao trazer o mês
+                    seguinte, a numeração avança e encerra na última parcela. Os meses futuros não
+                    são lançados automaticamente.
+                  </p>
+                </>
+              )}
               <label className="field">
                 Como o valor se repete?
                 <select
