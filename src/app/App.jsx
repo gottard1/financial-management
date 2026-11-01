@@ -7,6 +7,7 @@ import { exportFinanceData } from '../infrastructure/storage/localFinanceReposit
 import { useSharedMemberships } from '../hooks/useSharedMemberships.js';
 import { AppSidebar } from '../components/layout/AppSidebar.jsx';
 import { WorkspaceSelector } from '../components/layout/WorkspaceSelector.jsx';
+import { ReferenceMonth } from '../components/layout/ReferenceMonth.jsx';
 import { MonthlyOverview } from '../features/overview/MonthlyOverview.jsx';
 import { ExpenseList } from '../features/expenses/ExpenseList.jsx';
 import { ExpenseDialog } from '../features/expenses/ExpenseDialog.jsx';
@@ -309,73 +310,82 @@ function FinanceApp({ storageNamespace }) {
     <div className="app-shell">
       <AppSidebar tab={tab} onNavigate={go} onExport={exportData} cloudEnabled={cloudEnabled} />
       <main className="main-content">
-        <header className="app-page-header">
+        <header
+          className={
+            'app-page-header' +
+            (['people', 'groups', 'comparison'].includes(tab) ? ' without-period' : '')
+          }
+        >
           <div>
-            <p className="eyebrow">FINANÇAS PESSOAIS E EM GRUPO</p>
             <h1>
               {
                 {
-                  overview: 'Seu dinheiro, com direção.',
-                  expenses: 'Cada gasto no seu lugar.',
-                  budget: 'Um plano para cada real.',
-                  savings: 'Dê forma aos seus planos.',
-                  people: 'Seu perfil, do seu jeito.',
-                  groups: 'Pessoas, grupos e planos.',
-                  settlements: 'Repasses, sem perder o histórico.',
-                  comparison: 'Cada mês conta uma história.',
+                  overview: 'Visão geral',
+                  expenses: 'Despesas',
+                  budget: 'Orçamento',
+                  savings: 'Metas e reservas',
+                  people: 'Perfil',
+                  groups: 'Pessoas e grupos',
+                  settlements: 'Repasses e comprovantes',
+                  comparison: 'Comparar meses',
                 }[tab]
               }
             </h1>
-            <p className="muted">Organize o presente. Abra espaço para o que importa.</p>
+            <p className="muted">
+              {
+                {
+                  overview: 'Acompanhe seus compromissos e o disponível do mês.',
+                  expenses: 'Organize os lançamentos e acompanhe os pagamentos.',
+                  budget: 'Defina limites de gastos e quanto deseja guardar.',
+                  savings: 'Acompanhe suas reservas e avance nos seus objetivos.',
+                  people: 'Cuide dos seus dados pessoais, renda e benefícios.',
+                  groups: 'Gerencie pessoas, grupos e convites de acesso.',
+                  settlements: 'Confira os acertos e registre os valores recebidos.',
+                  comparison: 'Veja como os gastos mudam ao longo dos meses.',
+                }[tab]
+              }
+            </p>
           </div>
-          <label className="field reference-month">
-            Mês de referência
-            <input
-              type="month"
-              required
-              min="2000-01"
-              max="2099-12"
-              value={month}
-              onChange={(e) => {
-                if (e.target.value) {
-                  setMonth(e.target.value);
-                  setError('');
-                }
+          {!['people', 'groups', 'comparison'].includes(tab) && (
+            <ReferenceMonth
+              month={month}
+              onChange={(value) => {
+                setMonth(value);
+                setError('');
               }}
             />
-          </label>
+          )}
         </header>
-        <div className="account-bar">
-          <span>
-            {localMode ? 'Modo local de desenvolvimento' : user?.email || 'Sessão autenticada'} ·
-            {cloudEnabled
-              ? 'Conta com sincronização financeira privada.'
-              : 'Dados financeiros neste navegador.'}
-          </span>
-          <button
-            className="button secondary"
-            onClick={() => signOut().catch((err) => setError(err.message))}
-          >
-            {localMode ? 'Voltar ao login' : 'Sair'}
-          </button>
+        <div className="app-session-bar">
+          <div className="account-bar">
+            <span>
+              {localMode ? 'Modo local de desenvolvimento' : user?.email || 'Sessão autenticada'}
+            </span>
+            <button
+              className="button secondary"
+              onClick={() => signOut().catch((err) => setError(err.message))}
+            >
+              {localMode ? 'Voltar ao login' : 'Sair'}
+            </button>
+          </div>
+          <FinanceSyncStatus
+            status={syncStatus}
+            error={syncError}
+            retry={retrySync}
+            exportLocal={exportData}
+            useCloud={() => {
+              try {
+                exportData();
+                useCloudVersion();
+                setError('');
+              } catch (err) {
+                setError(err.message);
+              }
+            }}
+          />
         </div>
-        <FinanceSyncStatus
-          status={syncStatus}
-          error={syncError}
-          retry={retrySync}
-          exportLocal={exportData}
-          useCloud={() => {
-            try {
-              exportData();
-              useCloudVersion();
-              setError('');
-            } catch (err) {
-              setError(err.message);
-            }
-          }}
-        />
-        <div inert={blocked ? true : undefined}>
-          {tab !== 'people' && (
+        <div className="app-page-content" inert={blocked ? true : undefined}>
+          {!['people', 'groups'].includes(tab) && (
             <WorkspaceSelector
               {...{ mode, setMode, person, setPerson, setGroupId, tab }}
               groupId={selectedGroupId}
@@ -386,8 +396,7 @@ function FinanceApp({ storageNamespace }) {
           )}
           {mode === 'group' &&
             (group || selectedSharedGroup) &&
-            tab !== 'people' &&
-            tab !== 'groups' && (
+            ['overview', 'settlements'].includes(tab) && (
               <nav className="group-subnav" aria-label="Seções do grupo">
                 <button
                   className={'button ' + (tab === 'overview' ? 'primary' : 'secondary')}
@@ -450,7 +459,11 @@ function FinanceApp({ storageNamespace }) {
             )}
           </div>
           {tab === 'people' ? (
-            <ProfilePanel {...{ data: privateData, setData, month, user }} notify={setNotice} />
+            <ProfilePanel
+              {...{ data: privateData, setData, month, user }}
+              onMonthChange={setMonth}
+              notify={setNotice}
+            />
           ) : tab === 'groups' ? (
             <GroupsPanel
               {...{ data, setData, commitData }}

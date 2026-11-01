@@ -26,7 +26,7 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
     }
   }
   return (
-    <section className="panel">
+    <section className="panel budget-panel">
       <p className="eyebrow">O PLANO DO MÊS</p>
       <h2>Decida o destino do seu dinheiro</h2>
       <p className="muted">

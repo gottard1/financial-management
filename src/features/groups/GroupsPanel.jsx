@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   activeGroupMembers,
   removeGroupMember,
@@ -11,6 +11,8 @@ import { PurgeGroupDialog } from './PurgeGroupDialog.jsx';
 import { removeReceipt } from '../../infrastructure/storage/receiptRepository.js';
 export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, onExport }) {
   const { user, localMode } = useAuth();
+  const personFormPanel = useRef(null);
+  const groupFormPanel = useRef(null);
   const [removing, setRemoving] = useState('');
   const [removeError, setRemoveError] = useState('');
   const [purgeTarget, setPurgeTarget] = useState(null);
@@ -134,6 +136,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
     setMemberIds(activeGroupMembers(group));
     setAdminPersonId(group.adminPersonId || '');
     setGroupError('');
+    groupFormPanel.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
   function toggleMember(id) {
     if (activeGroupMembers(editing).includes(id)) return;
@@ -248,7 +251,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
   return (
     <>
       <div className="two-col groups-forms">
-        <section className="panel">
+        <section className="panel" ref={personFormPanel}>
           <p className="eyebrow">QUEM PARTICIPA DOS PLANOS</p>
           <h2>{editingPersonId ? 'Editar nome da pessoa' : 'Cadastrar uma pessoa'}</h2>
           <p className="muted">
@@ -292,7 +295,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
             </div>
           </form>
         </section>
-        <section className="panel">
+        <section className="panel" ref={groupFormPanel}>
           <p className="eyebrow">CONTAS COMPARTILHADAS</p>
           <h2>{editingId ? 'Editar grupo' : 'Criar um grupo'}</h2>
           <p className="muted">
@@ -424,7 +427,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
                     setEditingPersonId(person.id);
                     setPersonName(person.name === 'Você' ? '' : person.name);
                     setPersonError('');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    personFormPanel.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
                   }}
                 >
                   Editar nome

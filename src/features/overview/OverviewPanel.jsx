@@ -30,7 +30,7 @@ export function OverviewPanel({
   const ownBalance = stats.balances?.[receiverId] || 0;
   return (
     <>
-      <section className="two-col overview-grid">
+      <section className={'two-col overview-grid' + (groupMode ? ' overview-grid--group' : '')}>
         <article className="panel overview-panel">
           <header>
             <p className="eyebrow">COMO ESTÁ SEU MÊS</p>
@@ -155,57 +155,6 @@ export function OverviewPanel({
               }}
               readOnly={!onSharedReceive && (readOnly || !commitData)}
             />
-            <section className="overview-section">
-              <h3>Participantes · {members.length}</h3>
-              <p className="overview-note group-participant-note">
-                A parte de cada pessoa inclui contas pagas e pendentes. O acerto considera somente o
-                que já foi pago.
-              </p>
-              <div className="group-participant-list">
-                {members.map((person) => {
-                  const balance = stats.balances?.[person.id] || 0;
-                  return (
-                    <article className="group-participant" key={person.id}>
-                      <h4>{person.name}</h4>
-                      <dl>
-                        <div>
-                          <dt>Parte nas contas do mês</dt>
-                          <dd>{money(stats.shares?.[person.id] || 0)}</dd>
-                        </div>
-                        <div>
-                          <dt>Pagou nas contas</dt>
-                          <dd>{money(stats.paidBy?.[person.id] || 0)}</dd>
-                        </div>
-                        <div>
-                          <dt>
-                            {balance > 0 ? 'A receber' : balance < 0 ? 'A repassar' : 'Acerto'}
-                          </dt>
-                          <dd
-                            className={
-                              balance > 0 ? 'metric-positive' : balance < 0 ? 'metric-negative' : ''
-                            }
-                          >
-                            {balance === 0 ? 'Em equilíbrio' : money(Math.abs(balance))}
-                          </dd>
-                        </div>
-                      </dl>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-            <GroupSettlementHistory
-              records={(data.settlements || []).filter(
-                (item) => item.scope === scope && item.referenceMonth === month,
-              )}
-              nameOf={nameOf}
-              canUndo={(record) => Boolean(onSharedUndo) && record.receiverUid === receiverUid}
-              onUndo={onSharedUndo}
-            />
-            <p className="overview-note">
-              Registre uma devolução quando o dinheiro for recebido para atualizar os saldos. O
-              aplicativo não realiza pagamentos.
-            </p>
             <button
               type="button"
               className="button primary"
@@ -256,6 +205,57 @@ export function OverviewPanel({
           </article>
         )}
       </section>
+      {groupMode && (
+        <>
+          <section className="panel group-participants-panel">
+            <h3>Participantes · {members.length}</h3>
+            <p className="overview-note group-participant-note">
+              A parte de cada pessoa inclui contas pagas e pendentes. O acerto considera somente o
+              que já foi pago.
+            </p>
+            <div className="group-participant-list">
+              {members.map((person) => {
+                const balance = stats.balances?.[person.id] || 0;
+                return (
+                  <article className="group-participant" key={person.id}>
+                    <h4>{person.name}</h4>
+                    <dl>
+                      <div>
+                        <dt>Parte nas contas do mês</dt>
+                        <dd>{money(stats.shares?.[person.id] || 0)}</dd>
+                      </div>
+                      <div>
+                        <dt>Pagou nas contas</dt>
+                        <dd>{money(stats.paidBy?.[person.id] || 0)}</dd>
+                      </div>
+                      <div>
+                        <dt>{balance > 0 ? 'A receber' : balance < 0 ? 'A repassar' : 'Acerto'}</dt>
+                        <dd
+                          className={
+                            balance > 0 ? 'metric-positive' : balance < 0 ? 'metric-negative' : ''
+                          }
+                        >
+                          {balance === 0 ? 'Em equilíbrio' : money(Math.abs(balance))}
+                        </dd>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+          <section className="panel group-history-panel">
+            <GroupSettlementHistory
+              records={(data.settlements || []).filter(
+                (item) => item.scope === scope && item.referenceMonth === month,
+              )}
+              nameOf={nameOf}
+              canUndo={(record) => Boolean(onSharedUndo) && record.receiverUid === receiverUid}
+              onUndo={onSharedUndo}
+            />
+          </section>
+        </>
+      )}
       <div className="notice">
         <p>
           {groupMode

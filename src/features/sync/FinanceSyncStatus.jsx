@@ -10,12 +10,16 @@ const labels = {
   conflict: 'Conflito entre a cópia local e a nuvem',
 };
 export function FinanceSyncStatus({ status, error, retry, useCloud, exportLocal }) {
+  const compact = ['local', 'saved', 'pending', 'saving'].includes(status) && !error;
   return (
-    <section className={'finance-sync-status ' + status} aria-label="Sincronização dos dados">
+    <section
+      className={'finance-sync-status ' + status + (compact ? ' compact' : '')}
+      aria-label="Sincronização dos dados"
+    >
       <div>
         <strong role="status">{labels[status]}</strong>
         {error && <p role="alert">{error}</p>}
-        <small>Arquivos de comprovantes continuam neste navegador.</small>
+        {!compact && <small>Arquivos de comprovantes continuam neste navegador.</small>}
       </div>
       {(status === 'offline' || status === 'pending') && (
         <button className="button secondary" onClick={retry}>

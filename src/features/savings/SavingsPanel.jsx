@@ -69,7 +69,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
   }
   return (
     <>
-      <div className="summary-grid">
+      <div className="summary-grid summary-grid--three">
         {[
           ['Guardado neste mês', stats.savingsThisMonth],
           ['Acumulado registrado', stats.savingsAll],
@@ -95,7 +95,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
           nem retiradas.
         </p>
       </div>
-      <div className="two-col">
+      <div className="two-col savings-forms">
         <section className="panel">
           <h2>Registrar dinheiro guardado</h2>
           <form onSubmit={contribute}>

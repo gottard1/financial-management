@@ -3,9 +3,10 @@ import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js'
 import { calculateCompensation } from '../../domain/income/calculateCompensation.js';
 import { TAX_TABLES_2026 } from '../../domain/income/taxTables2026.js';
 import { defaultIncomeConfig } from '../../domain/budget/workspaceCalculations.js';
+import { ReferenceMonth } from '../../components/layout/ReferenceMonth.jsx';
 
 const numberText = (cents) => (cents / 100).toFixed(2).replace('.', ',');
-export function IncomePanel({ data, setData, month, person, notify }) {
+export function IncomePanel({ data, setData, month, person, notify, onMonthChange }) {
   const saved = {
     ...defaultIncomeConfig(data.months[month]?.[person] || 0),
     ...(data.incomeConfigs[month]?.[person] || {}),
@@ -69,12 +70,17 @@ export function IncomePanel({ data, setData, month, person, notify }) {
   }
   return (
     <section className="panel income-panel">
-      <p className="eyebrow">INFORMAÇÕES FINANCEIRAS DO PERFIL</p>
-      <h2>Renda e benefícios</h2>
-      <p className="muted section-intro">
-        Configure sua renda de {month.split('-').reverse().join('/')}. O dinheiro disponível
-        alimenta o orçamento e a divisão proporcional; VA e VR ficam separados.
-      </p>
+      <header className="income-panel-header">
+        <div>
+          <p className="eyebrow">INFORMAÇÕES FINANCEIRAS DO PERFIL</p>
+          <h2>Renda e benefícios</h2>
+          <p className="muted section-intro">
+            Configure sua renda de {month.split('-').reverse().join('/')}. O dinheiro disponível
+            alimenta o orçamento e a divisão proporcional; VA e VR ficam separados.
+          </p>
+        </div>
+        {onMonthChange && <ReferenceMonth month={month} onChange={onMonthChange} />}
+      </header>
       <form className="income-form" onSubmit={save}>
         <fieldset className="form-section">
           <legend>1. Como você recebe?</legend>

@@ -3,11 +3,11 @@ import React from 'react';
 export function SharedGroupInvitationPanel({ snapshot, onInvite }) {
   const active = snapshot.activeMemberIds || snapshot.people.map((person) => person.id);
   return (
-    <section className="panel">
+    <section className="panel shared-group-invitation">
       <h2>{snapshot.name}</h2>
       <p className="muted">Os dados cadastrais do grupo são gerenciados pelo administrador.</p>
       <h3>Participantes</h3>
-      <ul>
+      <ul className="shared-group-members">
         {snapshot.people.map((person) => (
           <li key={person.id}>
             {person.name}

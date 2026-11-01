@@ -272,10 +272,7 @@ export function GroupSharingPanel({
         <h2 id="sharing-title">Convites e acesso ao grupo</h2>
         <p className="muted">
           Informe o e-mail da pessoa. Você pode convidar quem já tem conta ou cadastrar um nome
-          provisório. O acesso é liberado após entrar com Google e aceitar o convite.
-        </p>
-        <p className="hint">
-          Os convites aparecem dentro do aplicativo. Compartilhe o endereço do site com a pessoa.
+          provisório. O acesso é liberado após entrar com Google e aceitar o convite no aplicativo.
         </p>
         <nav className="sharing-navigation" aria-label="Seções de convites e acesso">
           <button

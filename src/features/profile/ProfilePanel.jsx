@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { IncomePanel } from '../income/IncomePanel.jsx';
 import { profilePerson, saveProfile } from '../../domain/groups/profile.js';
 
-export function ProfilePanel({ data, setData, month, user, notify }) {
+export function ProfilePanel({ data, setData, month, user, notify, onMonthChange }) {
   const person = profilePerson(data, user?.uid);
   if (!person)
     return (
@@ -21,6 +21,7 @@ export function ProfilePanel({ data, setData, month, user, notify }) {
         key={`${person.id}|${month}`}
         {...{ data, setData, month, notify }}
         person={person.id}
+        onMonthChange={onMonthChange}
       />
     </div>
   );
@@ -36,7 +37,7 @@ function PersonalDetails({ person, user, setData, notify }) {
   const [error, setError] = useState('');
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   return (
-    <section className="panel">
+    <section className="panel personal-details-panel">
       <p className="eyebrow">SEU PERFIL</p>
       <h2>Dados pessoais</h2>
       <p className="muted section-intro">

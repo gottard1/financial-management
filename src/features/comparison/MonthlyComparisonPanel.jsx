@@ -24,13 +24,12 @@ export function MonthlyComparisonPanel({ data, scope, month, mode, workspace }) 
     <section className="comparison-panel" aria-labelledby="comparison-title">
       <header className="panel">
         <p className="eyebrow">SEU HISTÓRICO EM PERSPECTIVA</p>
-        <h2 id="comparison-title">Comparar meses</h2>
+        <h2 id="comparison-title">Período da comparação</h2>
         <p className="muted">
           {mode === 'group'
-            ? 'Compare as despesas do grupo selecionado.'
-            : 'Compare suas despesas pessoais e sua parte nas contas dos grupos.'}{' '}
-          Valores pagos e pendentes entram no mês de vencimento. Meses sem lançamentos aparecem com
-          zero.
+            ? 'Gastos do grupo selecionado.'
+            : 'Despesas pessoais e suas cotas nos grupos.'}{' '}
+          Inclui contas pagas e pendentes pelo mês de vencimento.
         </p>
         <div className="comparison-filters">
           <label className="field">

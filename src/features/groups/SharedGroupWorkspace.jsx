@@ -227,13 +227,13 @@ export function SharedGroupWorkspace({
   return (
     <>
       {selectedTab !== 'groups' && (
-        <div className="notice">
-          <span>
-            <strong>{snapshot.name}</strong> · Você pode criar e editar lançamentos financeiros. Os
-            dados cadastrais, as exclusões e a remoção de membros são gerenciados pelo
-            administrador.
-          </span>
-        </div>
+        <p className="shared-workspace-context">
+          <span className="pill">Participante</span>
+          Você participa como{' '}
+          {snapshot.people.find((person) => person.id === membership.personId)?.name ||
+            'integrante do grupo'}
+          .
+        </p>
       )}
       {!onNavigate && selectedTab !== 'groups' && (
         <nav className="group-subnav" aria-label="Seções do grupo compartilhado">
