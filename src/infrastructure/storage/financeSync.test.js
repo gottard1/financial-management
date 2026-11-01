@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFinanceSync } from './financeSync.js';
 import { migrateData } from '../../domain/budget/workspaceCalculations.js';
+import { defaultIncomeConfig } from '../../domain/budget/workspaceCalculations.js';
+import { encodeFinance, decodeFinance } from '../../domain/budget/financeCloudCodec.js';
+import { loadFinanceData, saveFinanceData } from './localFinanceRepository.js';
+import { createNamespacedStorage } from './namespacedStorage.js';
 
 const data = (name = 'Você') => ({ ...migrateData(null), people: [{ id: 'person-0', name }] });
 function harness({ initialData = data(), marker, upload = async () => 1 } = {}) {
@@ -111,6 +115,48 @@ test('offline changes stay durable and retry against the original revision', asy
   assert.equal(events.states.at(-1), 'saved');
   engine.stop();
 });
+
+test('transient upload failures retry automatically without losing pending changes', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let attempts = 0;
+  const { engine, events } = harness({
+    marker: { baseRevision: 3, dirty: false },
+    upload: async () => {
+      if (++attempts === 1) throw Object.assign(new Error('offline'), { code: 'unavailable' });
+      return 4;
+    },
+  });
+  engine.receive({ revision: 3, data: data() });
+  engine.update(data('Preservado'));
+  await engine.flush();
+  assert.equal(events.states.at(-1), 'offline');
+  t.mock.timers.tick(1000);
+  await new Promise(setImmediate);
+  assert.equal(events.writes.length, 2);
+  assert.equal(events.writes[1].revision, 3);
+  assert.equal(events.writes[1].value.people[0].name, 'Preservado');
+  assert.deepEqual(events.markers.at(-1), { baseRevision: 4, dirty: false });
+  engine.stop();
+});
+
+test('permission failures do not loop uploads and stopping cancels transient retries', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const code of ['permission-denied', 'unavailable']) {
+    const { engine, events } = harness({
+      upload: async () => {
+        throw Object.assign(new Error(code), { code });
+      },
+    });
+    engine.receive(null);
+    await engine.flush();
+    if (code === 'unavailable') engine.stop();
+    t.mock.timers.tick(60000);
+    await Promise.resolve();
+    assert.equal(events.writes.length, 1);
+    assert.equal(events.markers.at(-1).dirty, true);
+    engine.stop();
+  }
+});
 test('edits during an upload are queued and not replaced by the old upload echo', async () => {
   let finish;
   const { engine, events } = harness({
@@ -160,6 +206,95 @@ test('reloading with pending metadata resumes the upload without losing the loca
   assert.equal(events.writes[0].value.people[0].name, 'Pendente');
   assert.equal(events.writes[0].revision, 4);
   engine.stop();
+});
+
+test('financial records and calculation inputs survive offline reload and load on a new device', async () => {
+  const items = new Map();
+  const storage = createNamespacedStorage('account-a', {
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => items.set(key, value),
+  });
+  const original = migrateData({
+    ...data(),
+    people: [{ id: 'person-0', name: 'Ana', profile: { city: 'Recife' } }],
+    months: { '2026-11': { 'person-0': 310000 } },
+    incomeConfigs: {
+      '2026-11': {
+        'person-0': { ...defaultIncomeConfig(300000), cashBonus: 10000, foodAllowance: 50000 },
+      },
+    },
+    groups: [{ id: 'home', name: 'Casa', memberIds: ['person-0'] }],
+    expenses: [
+      {
+        id: 'bill',
+        description: 'Luz',
+        workspace: 'person:person-0',
+        amount: 15000,
+        date: '2026-11-01',
+        status: 'pending',
+        split: 'equal',
+        participants: ['person-0'],
+        payer: 'person-0',
+      },
+    ],
+    plans: { 'person:person-0|2026-11': { spendingLimit: 200000, savingTarget: 50000 } },
+    goals: [{ id: 'reserve', scope: 'person:person-0', title: 'Reserva', target: 1000000 }],
+    contributions: [
+      {
+        id: 'deposit',
+        scope: 'person:person-0',
+        goalId: 'reserve',
+        amount: 20000,
+        date: '2026-11-01',
+      },
+    ],
+  });
+  let offline = true;
+  let remote = null;
+  const connect = () =>
+    createFinanceSync({
+      initialData: loadFinanceData(storage).data,
+      marker: JSON.parse(storage.getItem('sync')),
+      saveLocal: (next) => saveFinanceData(next, storage),
+      saveMarker: (next) => storage.setItem('sync', JSON.stringify(next)),
+      archiveLocal: () => assert.fail('No conflict expected'),
+      saveRemote: async (next) => {
+        if (offline) throw Object.assign(new Error('offline'), { code: 'unavailable' });
+        const encoded = encodeFinance(next);
+        remote = decodeFinance([
+          {
+            id: 'state',
+            schemaVersion: 2,
+            revision: 1,
+            recordCount: encoded.records.length,
+            orders: encoded.orders,
+          },
+          ...encoded.records.map((item) => ({ ...item, revision: 1 })),
+        ]);
+        return 1;
+      },
+      onData: () => {},
+      onStatus: () => {},
+      onError: () => {},
+    });
+  let engine = connect();
+  engine.receive(null);
+  engine.update(original);
+  await engine.flush();
+  engine.stop();
+  assert.deepEqual(loadFinanceData(storage).data, original);
+  assert.equal(JSON.parse(storage.getItem('sync')).dirty, true);
+  offline = false;
+  engine = connect();
+  engine.receive(null);
+  await engine.flush();
+  assert.deepEqual(remote.data, original);
+  assert.equal(JSON.parse(storage.getItem('sync')).dirty, false);
+  const newDevice = harness();
+  newDevice.engine.receive(remote);
+  assert.deepEqual(newDevice.events.published.at(-1), original);
+  engine.stop();
+  newDevice.engine.stop();
 });
 test('stopped sessions never publish results into the next signed-in account', async () => {
   let finish;

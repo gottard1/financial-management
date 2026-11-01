@@ -2,7 +2,6 @@ import { prepareEmailInvitation } from '../../domain/groups/emailInvitation.js';
 import { lookupInviteAccount } from '../../infrastructure/firebase/inviteAccountLookup.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.jsx';
-import { money } from '../../domain/expenses/expenseCalculations.js';
 import {
   normalizeInviteEmail,
   projectSharedGroup,
@@ -19,22 +18,15 @@ import {
   watchSharing,
 } from '../../infrastructure/firebase/groupSharingRepository.js';
 
-import { MonthlySummary } from '../overview/MonthlySummary.jsx';
-import { OverviewPanel } from '../overview/OverviewPanel.jsx';
-import {
-  watchSettlementMonths,
-  saveSharedSettlement,
-} from '../../infrastructure/firebase/sharedSettlementRepository.js';
-import { ledgerRecords, sharedMonthOverview } from '../../domain/settlements/sharedSettlements.js';
-import { ExpenseList } from '../expenses/ExpenseList.jsx';
+import { watchSettlementMonths } from '../../infrastructure/firebase/sharedSettlementRepository.js';
+import { SharedGroupWorkspace } from './SharedGroupWorkspace.jsx';
 
 const sharingEnabled = import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true';
 
-export function SharedGroupView({ membership, referenceMonth }) {
+export function SharedGroupView({ membership, referenceMonth, tab, onNavigate }) {
   const { user } = useAuth();
   const [group, setGroup] = useState(null);
   const [ledgers, setLedgers] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [error, setError] = useState('');
   const [localMonth, setMonth] = useState(() => new Date().toLocaleDateString('sv-SE').slice(0, 7));
   const month = referenceMonth || localMonth;
@@ -60,111 +52,33 @@ export function SharedGroupView({ membership, referenceMonth }) {
       </p>
     );
   if (!group) return <p role="status">Carregando grupo…</p>;
-  const snapshot = group.snapshot;
-  const ledger = ledgers.find((item) => item.month === month);
-  const overview = sharedMonthOverview(snapshot, month, ledger);
-  const expenses = snapshot.expenses.filter((item) => item.date.startsWith(month));
-  const settlements = [...(snapshot.settlements || []), ...ledgerRecords(ledger)].filter(
-    (item) => item.referenceMonth === month,
-  );
-  const balance =
-    expenses
-      .filter((item) => item.status === 'paid')
-      .reduce(
-        (sum, item) =>
-          sum +
-          (item.payer === membership.personId ? item.amount : 0) -
-          (item.shares[membership.personId] || 0),
-        0,
-      ) +
-    settlements
-      .filter((item) => item.status === 'confirmed')
-      .reduce(
-        (sum, item) =>
-          sum +
-          (item.from === membership.personId ? item.amount : 0) -
-          (item.to === membership.personId ? item.amount : 0),
-        0,
-      );
-  const name = (id) => snapshot.people.find((person) => person.id === id)?.name || 'Participante';
   return (
-    <article className="panel">
-      <h3>{snapshot.name}</h3>
-      <p>
-        Você está vinculado a <strong>{name(membership.personId)}</strong>. O administrador gerencia
-        os lançamentos.
-      </p>
+    <>
       {!referenceMonth && (
         <label className="field">
-          Mês{' '}
+          Mês
           <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
         </label>
       )}
-      {overview ? (
-        <>
-          <MonthlySummary {...overview} mode="group" />
-          <OverviewPanel
-            {...overview}
-            mode="group"
-            readOnly
-            month={month}
-            receiverId={membership.personId}
-            receiverUid={user?.uid}
-            onSharedReceive={(transfer, id) =>
-              saveSharedSettlement(membership.groupId, {
-                month,
-                transfer,
-                id,
-                date: new Date().toLocaleDateString('sv-SE'),
-              })
-            }
-            onSharedUndo={(voidId) => saveSharedSettlement(membership.groupId, { month, voidId })}
-            scope={`group:${snapshot.id}`}
-            data={{
-              people: snapshot.people,
-              settlements: settlements.map((item) => ({ ...item, scope: `group:${snapshot.id}` })),
-              groups: [{ id: snapshot.id, memberIds: snapshot.people.map((person) => person.id) }],
-            }}
-          />
-        </>
-      ) : (
-        <p className="notice">
-          O administrador precisa atualizar os dados compartilhados para disponibilizar o resumo
-          completo deste mês.
-        </p>
-      )}
-      <p>
-        Sua parte nas contas:{' '}
-        <strong>
-          {money(expenses.reduce((sum, item) => sum + (item.shares[membership.personId] || 0), 0))}
-        </strong>
-      </p>
-      <p>
-        Saldo após repasses: <strong>{money(Math.abs(balance))}</strong>{' '}
-        {balance > 0 ? 'a receber' : balance < 0 ? 'a pagar' : '· tudo acertado'}
-      </p>
-      <ExpenseList
-        mode="group"
-        readOnly
-        data={{ people: snapshot.people }}
-        group={{ name: snapshot.name }}
-        memberIds={snapshot.people.map((person) => person.id)}
-        expenses={expenses}
-        visible={expenses
-          .filter((item) => filter === 'all' || item.status === filter)
-          .map((item) => ({
-            ...item,
-            participants: item.participants || Object.keys(item.shares),
-          }))}
-        filter={filter}
-        setFilter={setFilter}
-        incomes={{}}
+      <SharedGroupWorkspace
+        {...{ group, membership, month, ledgers, user, tab, onNavigate }}
+        onSaved={(result) =>
+          setGroup((current) =>
+            !current || current.revision <= result.revision ? { ...current, ...result } : current,
+          )
+        }
       />
-    </article>
+    </>
   );
 }
-
-export function GroupSharingPanel({ data, commitData, notify, syncBlocked = false }) {
+export function GroupSharingPanel({
+  data,
+  commitData,
+  notify,
+  syncBlocked = false,
+  financeRevision,
+  getFinanceRevision,
+}) {
   const { user, localMode } = useAuth();
   const [owned, setOwned] = useState([]);
   const [sent, setSent] = useState([]);
@@ -182,7 +96,6 @@ export function GroupSharingPanel({ data, commitData, notify, syncBlocked = fals
   const [section, setSection] = useState('manage');
   const ownedRef = useRef(owned);
   ownedRef.current = owned;
-  const previousData = useRef(data);
   const inviteForm = useRef();
   const group = data.groups.find((item) => item.id === groupId);
   const invitees = invitableGroupMembers(group);
@@ -213,20 +126,19 @@ export function GroupSharingPanel({ data, commitData, notify, syncBlocked = fals
     return () => stops.forEach((stop) => stop());
   }, [user?.uid, localMode, user?.emailVerified]);
 
-  // Only local edits made while this panel is mounted publish automatically. Never upload on load.
+  // Reconcile confirmed private data even when the owned groups arrive after the initial load.
   useEffect(() => {
-    if (previousData.current === data) return undefined;
-    previousData.current = data;
-    if (!sharingEnabled || !user || localMode || syncBlocked) return undefined;
+    if (!sharingEnabled || !user || localMode || syncBlocked || !financeRevision) return undefined;
     const timer = setTimeout(async () => {
       if (sharingOperation.current) return;
       try {
         for (const shared of ownedRef.current) {
           if (
+            !(shared.financeRevision > financeRevision) &&
             data.groups.some((item) => !item.deleted && item.id === shared.snapshot.id) &&
             stableJson(projectSharedGroup(data, shared.snapshot.id)) !== stableJson(shared.snapshot)
           )
-            await publishGroup(data, shared.snapshot.id, shared.revision);
+            await publishGroup(data, shared.snapshot.id, shared.revision, financeRevision);
         }
       } catch (err) {
         setError(err.message);
@@ -236,7 +148,7 @@ export function GroupSharingPanel({ data, commitData, notify, syncBlocked = fals
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [data, user?.uid, localMode, syncBlocked]);
+  }, [data, owned, user?.uid, localMode, syncBlocked, busy, financeRevision]);
 
   async function run(operation) {
     if (sharingOperation.current) return;
@@ -270,7 +182,7 @@ export function GroupSharingPanel({ data, commitData, notify, syncBlocked = fals
       if (existingInvite?.status === 'accepted')
         throw new Error('Esta conta já participa do grupo.');
       const current = ownedRef.current.find((item) => item.id === id);
-      await publishGroup(data, group.id, current?.revision ?? null);
+      await publishGroup(data, group.id, current?.revision ?? null, financeRevision);
       const result = await lookupInviteAccount(id, normalized);
       setLookup({ ...result, email: normalized, groupId: group.id });
       setInviteName(result.name || '');
@@ -321,7 +233,7 @@ export function GroupSharingPanel({ data, commitData, notify, syncBlocked = fals
         return prepared.data;
       });
       const current = ownedRef.current.find((item) => item.id === id);
-      await publishGroup(next, group.id, current?.revision ?? null);
+      await publishGroup(next, group.id, current?.revision ?? null, getFinanceRevision?.());
       await saveGroupInvite(id, prepared.personId, normalized, prepared.personName, group.name);
       setEmail('');
       setLookup(null);

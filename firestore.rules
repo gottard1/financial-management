@@ -106,13 +106,15 @@ service cloud.firestore {
         participantAccess(id));
       allow create: if signedIn() && request.resource.data.adminUid == request.auth.uid &&
         id == request.auth.uid + '_' + request.resource.data.snapshot.id &&
-        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt', 'deleted']) &&
+        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'financeRevision', 'updatedAt', 'deleted']) &&
+        (!('financeRevision' in request.resource.data) || (request.resource.data.financeRevision is int && request.resource.data.financeRevision >= 1)) &&
         (!('deleted' in request.resource.data) || request.resource.data.deleted is bool) &&
         request.resource.data.revision == 1 && request.resource.data.updatedAt == request.time;
       allow update: if signedIn() && resource.data.adminUid == request.auth.uid &&
         request.resource.data.adminUid == resource.data.adminUid &&
         request.resource.data.snapshot.id == resource.data.snapshot.id &&
-        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'updatedAt', 'deleted']) &&
+        request.resource.data.keys().hasOnly(['adminUid', 'snapshot', 'revision', 'financeRevision', 'updatedAt', 'deleted']) &&
+        (!('financeRevision' in request.resource.data) || (request.resource.data.financeRevision is int && request.resource.data.financeRevision >= 1)) &&
         (!('deleted' in request.resource.data) || request.resource.data.deleted is bool) &&
         (!('deleted' in resource.data) || resource.data.deleted != true || request.resource.data.deleted == true) &&
         request.resource.data.revision == resource.data.revision + 1 &&

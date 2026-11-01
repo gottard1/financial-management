@@ -24,3 +24,23 @@ test('invitation API starts without require(ESM) support used by local Node', ()
     { encoding: 'utf8', timeout: 15000 },
   );
 });
+
+test('shared finance API starts in the production ESM runtime', () => {
+  const entry = new URL('../api/group-finance.js', import.meta.url).href;
+  execFileSync(
+    process.execPath,
+    [
+      '--no-experimental-require-module',
+      '--input-type=module',
+      '--eval',
+      `
+    import assert from 'node:assert/strict';
+    const { default: handler } = await import(${JSON.stringify(entry)});
+    const response = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    await handler({ method: 'POST', headers: {}, body: {} }, response);
+    assert.equal(response.code, 401);
+  `,
+    ],
+    { encoding: 'utf8', timeout: 15000 },
+  );
+});

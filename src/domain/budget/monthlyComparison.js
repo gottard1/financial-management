@@ -13,7 +13,7 @@ const sum = (values) => {
   return result;
 };
 
-export function compareMonths(data, scope, start, end) {
+export function compareMonths(data, scope, start, end, workspace = calculateWorkspace) {
   shiftMonth(start, 0);
   shiftMonth(end, 0);
   const count =
@@ -28,7 +28,7 @@ export function compareMonths(data, scope, start, end) {
     try {
       return {
         month,
-        ...calculateWorkspace(data, month, scope, data.months[month] || {}),
+        ...workspace(data, month, scope, data.months[month] || {}),
         error: '',
       };
     } catch (error) {

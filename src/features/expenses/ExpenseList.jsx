@@ -32,7 +32,7 @@ function ExpenseStatus({ status }) {
   return <span className={'pill ' + status}>{status === 'paid' ? 'Paga' : 'Pendente'}</span>;
 }
 
-function ExpenseActions({ expense, onEdit, onDelete, mobile = false }) {
+function ExpenseActions({ expense, onEdit, onDelete, canDelete = true, mobile = false }) {
   return (
     <div className={'actions' + (mobile ? ' expense-mobile-actions' : '')}>
       <button
@@ -43,14 +43,16 @@ function ExpenseActions({ expense, onEdit, onDelete, mobile = false }) {
       >
         Editar
       </button>
-      <button
-        type="button"
-        className="button danger"
-        onClick={() => onDelete(expense)}
-        aria-label={'Excluir despesa ' + expense.description}
-      >
-        Excluir
-      </button>
+      {canDelete && (
+        <button
+          type="button"
+          className="button danger"
+          onClick={() => onDelete(expense)}
+          aria-label={'Excluir despesa ' + expense.description}
+        >
+          Excluir
+        </button>
+      )}
     </div>
   );
 }
@@ -71,12 +73,13 @@ export function ExpenseList({
   edit,
   setData,
   readOnly = false,
+  canDelete = true,
 }) {
   const shared = mode === 'group';
   const items = visible.map((expense) => {
     let shares = null;
     try {
-      shares = readOnly ? expense.shares : splitExpense(expense, incomes, memberIds);
+      shares = expense.shares || (readOnly ? null : splitExpense(expense, incomes, memberIds));
     } catch {}
     return {
       expense,
@@ -198,6 +201,7 @@ export function ExpenseList({
                           expense={item.expense}
                           onEdit={edit}
                           onDelete={deleteExpense}
+                          canDelete={canDelete}
                         />
                       </td>
                     )}
@@ -239,6 +243,7 @@ export function ExpenseList({
                     expense={item.expense}
                     onEdit={edit}
                     onDelete={deleteExpense}
+                    canDelete={canDelete}
                     mobile
                   />
                 )}

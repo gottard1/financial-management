@@ -24,10 +24,10 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
   }, []);
   const update = (id, patch) =>
     setEntries((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
-  function save(event) {
+  async function save(event) {
     event.preventDefault();
     try {
-      onSave(entries);
+      await onSave(entries);
     } catch (err) {
       setError(err.message);
     }

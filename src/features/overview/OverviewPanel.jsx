@@ -27,6 +27,7 @@ export function OverviewPanel({
   const nameOf = (id) =>
     data.people.find((person) => person.id === id)?.name || 'Pessoa cadastrada';
   const transfers = stats.transfers || [];
+  const ownBalance = stats.balances?.[receiverId] || 0;
   return (
     <>
       <section className="two-col overview-grid">
@@ -45,6 +46,33 @@ export function OverviewPanel({
               <strong>{money(stats.pending)}</strong>
             </div>
           </div>
+          {groupMode && receiverId && (
+            <section className="overview-section">
+              <h3>Sua participação · {nameOf(receiverId)}</h3>
+              <ul className="overview-detail-list">
+                <li>
+                  <span>Sua parte nas contas</span>
+                  <strong>{money(stats.shares?.[receiverId] || 0)}</strong>
+                </li>
+                <li>
+                  <span>Você pagou nas contas</span>
+                  <strong>{money(stats.paidBy?.[receiverId] || 0)}</strong>
+                </li>
+                <li>
+                  <span>
+                    {ownBalance > 0
+                      ? 'Você tem a receber'
+                      : ownBalance < 0
+                        ? 'Você tem a repassar'
+                        : 'Seu acerto'}
+                  </span>
+                  <strong>
+                    {ownBalance === 0 ? 'Em equilíbrio' : money(Math.abs(ownBalance))}
+                  </strong>
+                </li>
+              </ul>
+            </section>
+          )}
           {!groupMode && (
             <section className="overview-section">
               <h3>O que compõe seus gastos</h3>

@@ -7,7 +7,7 @@ const value = (c) => (c / 100).toFixed(2).replace('.', ',');
 export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
   const plan = data.plans[scope + '|' + month] || {};
   const [error, setError] = useState('');
-  function save(e) {
+  async function save(e) {
     e.preventDefault();
     try {
       const f = new FormData(e.currentTarget),
@@ -15,7 +15,7 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
       CATEGORIES.forEach((c) => (categories[c] = parseMoney(String(f.get(c) || '0'))));
       const spendingLimit = parseMoney(f.get('spendingLimit')),
         savingTarget = parseMoney(f.get('savingTarget'));
-      setData((d) => ({
+      await setData((d) => ({
         ...d,
         plans: { ...d.plans, [scope + '|' + month]: { spendingLimit, savingTarget, categories } },
       }));

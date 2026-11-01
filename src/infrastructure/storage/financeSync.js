@@ -24,11 +24,12 @@ export function createFinanceSync({
   let latestRemote;
   let remoteSequence = 0;
   let timer;
+  let retryDelay = 1000;
   let lastFailure;
   const idleWaiters = [];
   const persistMarker = () => saveMarker({ baseRevision, dirty });
   const status = (value) => {
-    if (!stopped) onStatus(value);
+    if (!stopped) onStatus(value, baseRevision);
   };
   function fail(error) {
     if (stopped) return;
@@ -94,6 +95,7 @@ export function createFinanceSync({
       onError(null);
       status(dirty ? 'pending' : 'saved');
       lastFailure = null;
+      retryDelay = 1000;
     } catch (error) {
       lastFailure = error;
       if (error.code === 'finance/conflict') conflict = true;
@@ -109,6 +111,18 @@ export function createFinanceSync({
       )
         receive(latestRemote);
       if (!stopped && dirty && !conflict && captured !== sequence) schedule();
+      else if (
+        !stopped &&
+        dirty &&
+        !conflict &&
+        ['unavailable', 'deadline-exceeded', 'aborted', 'resource-exhausted'].includes(
+          lastFailure?.code,
+        )
+      ) {
+        clearTimeout(timer);
+        timer = setTimeout(flush, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+      }
     }
   }
   function schedule() {
@@ -117,6 +131,7 @@ export function createFinanceSync({
     timer = setTimeout(flush, 600);
   }
   const api = {
+    getRevision: () => baseRevision,
     receive,
     fail,
     flush,

@@ -25,8 +25,19 @@ export function useFinanceData(namespace = 'local') {
     cloudEnabled && !loaded.blocked ? 'loading' : 'local',
   );
   const [syncError, setSyncError] = useState('');
+  const [cloudRevision, setCloudRevision] = useState(null);
   const sync = useRef(null);
   const reconnect = useRef(null);
+
+  useEffect(() => {
+    if (!cloudEnabled) return undefined;
+    const resume = () => {
+      reconnect.current?.();
+      sync.current?.flush();
+    };
+    window.addEventListener('online', resume);
+    return () => window.removeEventListener('online', resume);
+  }, [cloudEnabled]);
 
   useEffect(() => {
     if (!cloudEnabled || loaded.blocked) return undefined;
@@ -65,7 +76,10 @@ export function useFinanceData(namespace = 'local') {
             currentData.current = next;
             publishData(next);
           },
-          onStatus: setSyncStatus,
+          onStatus: (status, revision) => {
+            setCloudRevision(revision);
+            setSyncStatus(status);
+          },
           onError: (error) =>
             setSyncError(
               error
@@ -146,6 +160,8 @@ export function useFinanceData(namespace = 'local') {
     cloudEnabled,
     syncStatus,
     syncError,
+    cloudRevision,
+    getCloudRevision: () => sync.current?.getRevision(),
     retrySync: () => {
       if (!reconnect.current) {
         window.location.reload();

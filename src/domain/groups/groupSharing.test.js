@@ -110,7 +110,10 @@ test('shared overview matches common owner totals and budget without sharing sal
     shared.overview['2026-10'].stats,
     publicGroupStats(calculateWorkspace(data, '2026-10', 'group:g', data.months['2026-10'])),
   );
-  assert.deepEqual(shared.overview['2026-10'].plan, data.plans['group:g|2026-10']);
+  assert.deepEqual(shared.overview['2026-10'].plan, {
+    ...data.plans['group:g|2026-10'],
+    categories: {},
+  });
   assert.equal(shared.overview['2026-10'].benefits, undefined);
   assert.equal(shared.overview['2026-10'].stats.income, undefined);
   assert.equal(shared.overview['2026-10'].stats.available, undefined);

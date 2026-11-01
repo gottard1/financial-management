@@ -47,7 +47,12 @@ export function watchSharedGroup(id, receive, fail) {
     fail,
   );
 }
-export async function publishGroup(data, groupId, expectedRevision = null) {
+export async function publishGroup(
+  data,
+  groupId,
+  expectedRevision = null,
+  expectedFinanceRevision,
+) {
   const db = database();
   const adminUid = auth.currentUser.uid;
   const ref = doc(db, 'sharedGroups', sharedGroupId(adminUid, groupId));
@@ -56,6 +61,14 @@ export async function publishGroup(data, groupId, expectedRevision = null) {
     throw new Error('Este grupo foi excluído e está disponível somente no histórico.');
   await runTransaction(db, async (transaction) => {
     const existing = await transaction.get(ref);
+    const finance = await transaction.get(doc(db, 'users', adminUid, 'finance', 'state'));
+    if (
+      expectedFinanceRevision !== undefined &&
+      finance.data()?.revision !== expectedFinanceRevision
+    )
+      throw new Error(
+        'Os dados financeiros mudaram em outra sessão. Aguarde a sincronização antes de compartilhar.',
+      );
     if (existing.exists() && existing.data().deleted)
       throw new Error(
         'Este grupo já foi excluído. Atualize os dados da conta para consultar o histórico.',
@@ -68,6 +81,7 @@ export async function publishGroup(data, groupId, expectedRevision = null) {
       adminUid,
       snapshot,
       revision: (expectedRevision || 0) + 1,
+      ...(finance.exists() ? { financeRevision: finance.data().revision } : {}),
       updatedAt: serverTimestamp(),
     });
   });

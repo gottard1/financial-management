@@ -7,8 +7,7 @@ import { exportFinanceData } from '../infrastructure/storage/localFinanceReposit
 import { useSharedMemberships } from '../hooks/useSharedMemberships.js';
 import { AppSidebar } from '../components/layout/AppSidebar.jsx';
 import { WorkspaceSelector } from '../components/layout/WorkspaceSelector.jsx';
-import { MonthlySummary } from '../features/overview/MonthlySummary.jsx';
-import { OverviewPanel } from '../features/overview/OverviewPanel.jsx';
+import { MonthlyOverview } from '../features/overview/MonthlyOverview.jsx';
 import { ExpenseList } from '../features/expenses/ExpenseList.jsx';
 import { ExpenseDialog } from '../features/expenses/ExpenseDialog.jsx';
 import { RecurringExpensesDialog } from '../features/expenses/RecurringExpensesDialog.jsx';
@@ -67,6 +66,8 @@ function FinanceApp({ storageNamespace }) {
     cloudEnabled,
     syncStatus,
     syncError,
+    cloudRevision,
+    getCloudRevision,
     retrySync,
     useCloudVersion,
     commitData,
@@ -384,8 +385,7 @@ function FinanceApp({ storageNamespace }) {
             />
           )}
           {mode === 'group' &&
-            group &&
-            !selectedSharedGroup &&
+            (group || selectedSharedGroup) &&
             tab !== 'people' &&
             tab !== 'groups' && (
               <nav className="group-subnav" aria-label="Seções do grupo">
@@ -434,7 +434,9 @@ function FinanceApp({ storageNamespace }) {
                   data={privateData}
                   commitData={commitData}
                   notify={setNotice}
-                  syncBlocked={blocked}
+                  syncBlocked={blocked || !cloudEnabled || syncStatus !== 'saved'}
+                  financeRevision={cloudRevision}
+                  getFinanceRevision={getCloudRevision}
                 />
               </React.Suspense>
             ) : (
@@ -466,6 +468,8 @@ function FinanceApp({ storageNamespace }) {
                 key={selectedSharedGroup.id}
                 membership={selectedSharedGroup.membership}
                 referenceMonth={month}
+                tab={tab}
+                onNavigate={go}
               />
             </React.Suspense>
           ) : mode === 'group' && !group ? (
@@ -488,7 +492,6 @@ function FinanceApp({ storageNamespace }) {
                   <p>{statsError} Edite as rendas ou a forma de divisão das despesas.</p>
                 </div>
               )}
-              {stats && tab === 'overview' && <MonthlySummary {...{ stats, mode, benefits }} />}
               {tab === 'comparison' && (
                 <MonthlyComparisonPanel
                   key={scope + '|' + month}
@@ -549,8 +552,8 @@ function FinanceApp({ storageNamespace }) {
                 </section>
               )}
               {tab === 'overview' && stats && (
-                <OverviewPanel
-                  {...{ stats, mode, plan, data, go, scope, month }}
+                <MonthlyOverview
+                  {...{ stats, mode, benefits, plan, data, go, scope, month }}
                   commitData={receiptsLoading ? undefined : commitData}
                   receiverId={group?.adminPersonId}
                   receiverUid={user?.uid}

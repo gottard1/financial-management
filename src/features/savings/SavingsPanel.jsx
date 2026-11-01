@@ -3,19 +3,20 @@ import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js'
 import { Progress } from '../../components/ui/Progress.jsx';
 import { CATEGORIES } from '../../shared/constants/categories.js';
 const value = (c) => (c / 100).toFixed(2).replace('.', ',');
-export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
+export function SavingsPanel({ data, setData, scope, month, stats, notify, canDelete = true }) {
   const [error, setError] = useState('');
   const goals = data.goals.filter((g) => g.scope === scope),
     contributions = data.contributions.filter((c) => c.scope === scope),
     monthly = contributions.filter((c) => c.date.startsWith(month));
-  function goal(e) {
+  async function goal(e) {
     e.preventDefault();
+    const form = e.currentTarget;
     try {
       const f = new FormData(e.currentTarget),
         target = parseMoney(f.get('target')),
         title = String(f.get('title')).trim();
       if (!title || target <= 0) throw Error('Informe um nome e uma meta maior que zero.');
-      setData((d) => ({
+      await setData((d) => ({
         ...d,
         goals: [
           ...d.goals,
@@ -28,15 +29,16 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
           },
         ],
       }));
-      e.currentTarget.reset();
+      form.reset();
       setError('');
       notify('Meta criada. Registre aportes para acompanhar seu progresso.');
     } catch (err) {
       setError(err.message);
     }
   }
-  function contribute(e) {
+  async function contribute(e) {
     e.preventDefault();
+    const form = e.currentTarget;
     try {
       const f = new FormData(e.currentTarget),
         amount = parseMoney(f.get('amount')),
@@ -44,7 +46,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
         goalId = String(f.get('goalId'));
       if (amount <= 0) throw Error('O aporte deve ser maior que zero.');
       if (!date.startsWith(month)) throw Error('Escolha uma data no mês selecionado.');
-      setData((d) => ({
+      await setData((d) => ({
         ...d,
         contributions: [
           ...d.contributions,
@@ -58,7 +60,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
           },
         ],
       }));
-      e.currentTarget.reset();
+      form.reset();
       setError('');
       notify('Dinheiro guardado registrado. O disponível do mês foi atualizado.');
     } catch (err) {
@@ -71,7 +73,9 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
         {[
           ['Guardado neste mês', stats.savingsThisMonth],
           ['Acumulado registrado', stats.savingsAll],
-          ['Disponível previsto', stats.available],
+          scope.startsWith('group:')
+            ? ['Meta de guardar no mês', data.plans[scope + '|' + month]?.savingTarget || 0]
+            : ['Disponível previsto', stats.available],
         ].map(([label, amount]) => (
           <article className="card summary-card" key={label}>
             <p>{label}</p>
@@ -162,20 +166,22 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
             <article className="goal-card panel" key={g.id}>
               <div className="section-heading">
                 <h3>{g.title}</h3>
-                <button
-                  className="button danger"
-                  aria-label={'Excluir meta ' + g.title}
-                  onClick={() => {
-                    if (contributions.some((c) => c.goalId === g.id)) {
-                      setError('Exclua os aportes vinculados antes de excluir esta meta.');
-                      return;
-                    }
-                    if (confirm('Excluir esta meta?'))
-                      setData((d) => ({ ...d, goals: d.goals.filter((x) => x.id !== g.id) }));
-                  }}
-                >
-                  ×
-                </button>
+                {canDelete && (
+                  <button
+                    className="button danger"
+                    aria-label={'Excluir meta ' + g.title}
+                    onClick={() => {
+                      if (contributions.some((c) => c.goalId === g.id)) {
+                        setError('Exclua os aportes vinculados antes de excluir esta meta.');
+                        return;
+                      }
+                      if (confirm('Excluir esta meta?'))
+                        setData((d) => ({ ...d, goals: d.goals.filter((x) => x.id !== g.id) }));
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
               <strong className="amount">{money(saved)}</strong>
               <Progress amount={saved} target={g.target} label={'Meta ' + g.title} />
@@ -201,18 +207,20 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify }) {
                   </p>
                   <small>{c.note}</small>
                 </div>
-                <button
-                  className="button danger"
-                  onClick={() => {
-                    if (confirm('Excluir este aporte? O valor deixará de contar como guardado.'))
-                      setData((d) => ({
-                        ...d,
-                        contributions: d.contributions.filter((x) => x.id !== c.id),
-                      }));
-                  }}
-                >
-                  Excluir
-                </button>
+                {canDelete && (
+                  <button
+                    className="button danger"
+                    onClick={() => {
+                      if (confirm('Excluir este aporte? O valor deixará de contar como guardado.'))
+                        setData((d) => ({
+                          ...d,
+                          contributions: d.contributions.filter((x) => x.id !== c.id),
+                        }));
+                    }}
+                  >
+                    Excluir
+                  </button>
+                )}
               </li>
             ))}
           </ul>

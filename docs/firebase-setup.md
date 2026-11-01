@@ -45,7 +45,7 @@ O gráfico e as tabelas exibem renda em dinheiro, despesas pagas e pendentes, m�
 1. Crie o banco **Cloud Firestore padrão**, em modo de produção, no mesmo projeto usado pelo Authentication. Escolha a localização antes de criar o banco.
 2. Publique as regras do arquivo `firestore.rules`. Pelo Console, copie esse arquivo para a aba Regras do Firestore e publique. Com Firebase CLI autenticado, a alternativa é `npx firebase deploy --only firestore:rules --project financial-management-262fb`. Este comando não publica o site.
 3. Configure `VITE_GROUP_SHARING_ENABLED=true` no ambiente desejado da Vercel e gere um novo deploy. Localmente, adicione a variável a `.env.local` e reinicie o Vite. Sem essa variável, apenas os convites e a consulta compartilhada ficam desativados; a sincronização financeira privada continua ativa por padrão.
-4. Em **Pessoas e grupos**, crie um grupo com seu nome. Em **Convites e acesso ao grupo**, escolha o grupo, informe o e-mail e clique em **Consultar e-mail**. Se houver conta, confira o nome retornado; caso contrário, informe um nome provisório. Você também pode vincular a um participante existente para preservar o histórico. Quem publica o grupo é seu administrador no Firestore; somente essa conta pode atualizar dados e gerenciar convites.
+4. Em **Pessoas e grupos**, crie um grupo com seu nome. Em **Convites e acesso ao grupo**, escolha o grupo, informe o e-mail e clique em **Consultar e-mail**. Se houver conta, confira o nome retornado; caso contrário, informe um nome provisório. Você também pode vincular a um participante existente para preservar o histórico. O administrador publica o acesso inicial; participantes ativos também podem criar convites pela área **Dados e participantes do grupo**, usando a API do servidor.
 5. Compartilhe o endereço do site com o convidado. O sistema **não envia e-mail de convite**: os convites ficam disponíveis dentro do aplicativo, inclusive para contas criadas posteriormente. O acesso é feito pela conta Google com e-mail verificado.
 6. O convidado entra com a conta Google do e-mail informado e aceita o convite dentro do aplicativo. O nome provisório permanece no grupo, independentemente do nome no perfil pessoal. O aceite preserva o ID do participante e todo seu histórico no grupo.
 
@@ -54,14 +54,22 @@ A área de acesso está separada em **Convidar e gerenciar** (formulário, convi
 ### Comportamento e limites
 
 - O e-mail é opcional para participantes; sem convite aceito não há acesso compartilhado. O administrador pode alterar o e-mail ou cancelar um convite pendente. O participante vinculado não é trocado por outro cadastro; o administrador pode remover a pessoa do grupo para revogar esse acesso.
-- O participante consulta despesas, sua parte, saldo após repasses e histórico de repasses por competência. Os lançamentos são gerenciados pelo administrador. Os grupos recebidos aparecem também no seletor do espaço **Grupo**. A Visão geral mostra os mesmos totais das contas, orçamento, reservas, divisão por participante e acertos do administrador. Salários, renda total, benefícios e disponível pessoal ficam fora da visão do grupo e da projeção compartilhada.
-- O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas do grupo com rateio calculado e repasses. Inclui resumos mensais das contas, aportes, orçamento e acertos; não inclui rendas individualizadas, perfis de renda, despesas individuais, e-mails dos demais convidados, notas ou arquivos/metadados de comprovantes.
+- O participante pode criar e editar despesas, trazer recorrentes, alterar orçamento, criar metas e aportes, renomear o grupo e convidar pessoas. Usa os mesmos formulários, totais e painéis do administrador, com sua própria parte e saldo em destaque. Exclusões, remoção de membros e limpeza de histórico são exclusivas do administrador. Salários, renda total, benefícios e disponível pessoal ficam fora da projeção compartilhada.
+- O Firestore recebe uma projeção explícita de nomes/IDs dos integrantes, despesas com rateio calculado, orçamento por categoria, metas, aportes e repasses do grupo. Observações dos aportes do grupo são compartilhadas. Rendas, perfis, despesas individuais, e-mails de convidados e notas/arquivos/metadados dos comprovantes ficam privados.
 - As alterações do administrador são publicadas com atraso de 700 ms enquanto o aplicativo está aberto. Falhas geram aviso e podem ser retomadas com **Atualizar dados compartilhados**. O primeiro convite também publica o histórico existente.
 - O estado completo do administrador é sincronizado pela área privada da própria conta. A projeção compartilhada permanece separada e não expõe esse estado aos convidados. Revisões transacionais evitam sobrescrever uma publicação concorrente sem aviso.
 - Aceite e associação são gravados atomicamente. As regras exigem e-mail verificado, convite pendente para aquele endereço e correspondência entre grupo, participante e UID.
 - O snapshot é um documento Firestore, sujeito ao limite de tamanho por documento. Não há upload de arquivos nesta etapa.
 
 Para grupos publicados antes da integração com a Visão geral, o administrador deve usar **Atualizar dados compartilhados** uma vez após atualizar o aplicativo. A confirmação de recebimentos pelos participantes exige publicar as regras atualizadas de firestore.rules; não exige novos índices.
+
+### Ativar edição por participantes
+
+Publique a nova rota `api/group-finance.js` junto com o site e as regras completas de `firestore.rules`. A API usa as mesmas variáveis de servidor `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` e `FIREBASE_PRIVATE_KEY` já usadas na consulta de convites. Nenhuma dessas credenciais pode ter prefixo `VITE_`. `npm run dev` atende as duas rotas; `npm run preview` não executa APIs.
+
+A rota aceita somente sessões Google com e-mail verificado, associação ativa e convite aceito. Inclusões e edições são aplicadas aos registros financeiros do proprietário e à projeção do grupo na mesma transação. O participante recebe apenas dados públicos do grupo. Exclusões e remoções são recusadas pelo servidor, mesmo por chamadas manuais; o Firestore continua bloqueando escritas diretas do participante na área privada e na projeção do grupo.
+
+`financeRevision` associa cada projeção à revisão privada que a gerou. Uma publicação automática antiga não pode substituir uma edição mais recente. Duas gravações concorrentes não são mescladas silenciosamente: a segunda precisa ser revista após a atualização do grupo. A edição compartilhada requer conexão; falhas mantêm o formulário e não exibem sucesso.
 
 ### Recebimentos confirmados pelo próprio participante
 

@@ -9,7 +9,7 @@ export function adminServices() {
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
     if (!projectId || !clientEmail || !privateKey) {
-      const error = new Error('A busca de contas ainda não foi configurada no servidor.');
+      const error = new Error('Os serviços do Firebase ainda não foram configurados no servidor.');
       error.status = 503;
       throw error;
     }

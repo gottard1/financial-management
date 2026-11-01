@@ -7,13 +7,13 @@ const monthLabel = (month) =>
     new Date(`${month}-01T12:00:00Z`),
   );
 
-export function MonthlyComparisonPanel({ data, scope, month, mode }) {
+export function MonthlyComparisonPanel({ data, scope, month, mode, workspace }) {
   const [start, setStart] = useState(() => shiftMonth(month, -5));
   const [end, setEnd] = useState(month);
   let comparison,
     error = '';
   try {
-    comparison = compareMonths(data, scope, start, end);
+    comparison = compareMonths(data, scope, start, end, workspace);
   } catch (err) {
     error = err.message;
   }

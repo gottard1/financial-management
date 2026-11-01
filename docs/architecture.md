@@ -22,21 +22,65 @@ O estado local continua sendo um documento inteiro para backup e compatibilidade
 
 `financeSync` mantém marcadores locais de envio pendente, serializa gravações e preserva alterações feitas durante um envio. A nuvem só é carregada depois de uma leitura confirmada pelo servidor. Uma conta ainda vazia recebe a cópia local da mesma conta; versões divergentes com alterações não enviadas exigem exportação e resolução explícita. A troca pela versão remota arquiva a versão local antes de substituir a cópia ativa. A gravação individual de comprovantes continua em IndexedDB.
 
+Erros transitórios de envio são retomados automaticamente com espera progressiva entre 1 e 30 segundos. A volta da conexão reabre a escuta e tenta enviar alterações pendentes. Falhas de permissão e conflitos não entram nessa repetição. A confirmação de salvamento continua dependendo da transação remota.
+
+### Edição por participantes
+
+`MonthlyOverview` compõe o mesmo resumo e os mesmos painéis para administrador e participante. A parte, o total pago e o saldo destacados usam o participante vinculado à conta. `SharedGroupWorkspace` reutiliza os formulários de despesas, recorrência, orçamento, reservas, repasses e comparação. Os formulários aguardam a resposta do servidor antes de comunicar sucesso; controles de exclusão ficam ausentes para participantes.
+
+`POST /api/group-finance` valida o token Google e verifica associação ativa e convite aceito dentro da transação. A rota aceita inclusão/edição de despesas, planos, metas e aportes, cópia de recorrentes, nome do grupo e novos convites. Não aceita exclusões, remoção de membros, mudança de administrador ou alterações em perfis/rendas pessoais. A prévia proporcional é calculada no servidor e retorna somente as cotas.
+
+A mesma transação grava os documentos financeiros privados do proprietário, a revisão e a projeção pública atualizada. As regras do Firestore continuam impedindo leitura ou escrita direta de convidados na área privada. `financeRevision` relaciona a projeção à revisão financeira e impede que uma publicação automática com dados antigos desfaça uma edição compartilhada. Concorrência retorna conflito, preservando os dados atuais.
+
 ### Tabelas tributárias versionadas
 
 `domain/income/taxTables2026.js` concentra os valores e referências usados no cálculo. O cálculo não deve trocar silenciosamente para outra tabela nem usar a tabela atual para um período sem aviso. A futura seleção por competência deve associar uma versão à renda salva.
 
 ## Modelo atual
 
-| Entidade | Identificação      | Responsabilidade                                      |
-| -------- | ------------------ | ----------------------------------------------------- |
-| Pessoas  | ID estável         | Nomes e referências, sem limite fixo                  |
-| Grupos   | ID e memberIds     | Composição dos espaços compartilhados                 |
-| Rendas   | Mês e ID da pessoa | Valores líquidos e perfil de simulação                |
-| Despesas | ID e workspace     | Valor, participantes, percentuais, pagador e situação |
-| Planos   | Workspace e mês    | Limite total, categorias e meta de economia           |
-| Metas    | ID e scope         | Objetivo acumulado e prazo                            |
-| Aportes  | ID e scope         | Valor guardado e vínculo opcional com meta            |
+| Entidade | Identificação      | Responsabilidade                                        |
+| -------- | ------------------ | ------------------------------------------------------- |
+| Pessoas  | ID estável         | Nomes e referências, sem limite fixo                    |
+| Grupos   | ID e memberIds     | Composição dos espaços compartilhados                   |
+| Rendas   | Mês e ID da pessoa | Valores líquidos e perfil de simulação                  |
+| Despesas | ID e workspace     | Valor, participantes, percentuais, pagador e situação   |
+| Planos   | Workspace e mês    | Limite total, categorias e meta de economia             |
+| Metas    | ID e scope         | Objetivo acumulado e prazo                              |
+| Aportes  | ID e scope         | Valor guardado e vínculo opcional com meta              |
+| Repasses | ID, scope e mês    | Recebimento confirmado/estornado e comprovante opcional |
+
+### Models e extensões
+
+Os models são objetos JavaScript validados por `migrateData`, sem ORM ou classes de banco. Valores monetários usam centavos inteiros.
+
+| Model / seção                             | Campos principais                                                                                                                                                                 | Persistência                                                           |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Pessoa / `people`                         | `id`, `name`, `accountUid`, `inviteEmail`, `profile` (`phone`, `city`, `occupation`)                                                                                              | Documento privado por pessoa                                           |
+| Grupo / `groups`                          | `id`, `name`, `memberIds`, `adminPersonId`, `removedMemberIds`, `deleted`                                                                                                         | Documento privado e projeção pública filtrada                          |
+| Renda mensal / `months`                   | competência → pessoa → líquido em dinheiro                                                                                                                                        | Documento `income:<mês>`                                               |
+| Configuração de cálculo / `incomeConfigs` | `type`, `gross`, `dependents`, `otherDeductions`, `meiActivity`, `pjTaxPercent`, `pjFixedCosts`, `cashBonus`, `otherCashIncome`, `foodAllowance`, `mealAllowance`                 | Mesmo documento mensal de renda                                        |
+| Despesa / `expenses`                      | `id`, `workspace`, `description`, `amount`, `category`, `date`, `status`, `payer`, `participants`, `split`, `percentages`, `fixed`, `fixedAmountType`, `installments`, `originId` | Documento por despesa                                                  |
+| Orçamento / `plans`                       | chave `scope\|mês`, `spendingLimit`, `savingTarget`, `categories`                                                                                                                 | Documento por espaço/mês                                               |
+| Meta / `goals`                            | `id`, `scope`, `title`, `target`, `targetDate`                                                                                                                                    | Documento por meta                                                     |
+| Aporte / `contributions`                  | `id`, `scope`, `amount`, `date`, `goalId`, `note`                                                                                                                                 | Documento por aporte                                                   |
+| Repasse / `settlements`                   | `id`, `scope`, `from`, `to`, `amount`, `date`, `referenceMonth`, `note`, `status`, `receipt`                                                                                      | Privado por repasse; recebimentos compartilhados em `settlementMonths` |
+| Convite / `groupInvites`                  | `groupId`, `personId`, `email`, `personName`, `groupName`, `adminUid`, `status`, `acceptedUid`                                                                                    | Coleção de convites                                                    |
+| Vínculo / `groupMemberships`              | `uid`, `groupId`, `personId`, `inviteId`                                                                                                                                          | Coleção de associações                                                 |
+| Estado / `finance/state`                  | `schemaVersion`, `revision`, `recordCount`, `orders`, `updatedAt`                                                                                                                 | Controle de integridade e concorrência                                 |
+
+O líquido e as configurações de entrada são persistidos. Detalhes tributários, cotas e resumos são derivados; não existe um model independente de simulação salva. Alterar entradas pode recalcular o passado, e os arquivos de comprovantes continuam locais.
+
+É possível ampliar o modelo. As próximas adições com maior utilidade são:
+
+| Proposta                                  | Necessidade atendida                                                         | Prioridade sugerida                        |
+| ----------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------ |
+| `AuditEvent`                              | Registrar quem alterou cada dado do grupo, quando e os valores anteriores    | Alta após liberar colaboração              |
+| `MonthlySnapshot` / `CalculationSnapshot` | Preservar fechamentos, tabela tributária e resultados de cálculos históricos | Alta                                       |
+| `IncomeEntry`                             | Várias fontes de receita por pessoa/mês                                      | Conforme a necessidade de rendas variáveis |
+| `Payment` e `PaymentSource`               | Pagamentos parciais, vários pagadores, contas/cartões e consumo de VA/VR     | Conforme a necessidade de conciliação      |
+| `ReserveMovement`                         | Aportes, retiradas e transferências entre reservas                           | Conforme a necessidade de retiradas        |
+
+Essas propostas não foram adicionadas nesta mudança. Novas entidades exigem valores padrão/migração, validação, inclusão no codec e regras, projeção pública por lista explícita e testes de persistência e isolamento. Novos campos públicos não devem carregar perfis ou salários individuais.
 
 `workspace`/`scope` usam `person:<id>` ou `group:<id>`. Rendas e configurações são mapas por ID da pessoa, dentro de cada mês. Adicionar ou renomear alguém não muda os vínculos dos registros existentes.
 

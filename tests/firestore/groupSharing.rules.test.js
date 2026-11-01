@@ -2,6 +2,13 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createFinanceCloudStore } from '../../src/infrastructure/firebase/financeCloudStore.js';
+import { editSharedGroup } from '../../server/sharedGroupFinance.js';
+import { decodeFinance } from '../../src/domain/budget/financeCloudCodec.js';
+import {
+  initializeApp as initializeAdminApp,
+  deleteApp as deleteAdminApp,
+} from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore';
 import { revokeGroupMemberAccess } from '../../src/infrastructure/firebase/groupMemberAccess.js';
 import {
   deleteSharedGroup,
@@ -38,6 +45,100 @@ const projectId = 'demo-financial-sharing';
 const groupId = 'admin_home';
 const inviteId = `${groupId}_person-b`;
 const memberId = `member_${groupId}`;
+test(
+  'shared edits persist atomically through the server, reject concurrent revisions, and never grant private writes or deletion',
+  { skip: !enabled },
+  async () => {
+    const app = initializeAdminApp({ projectId }, 'collaborative-finance-test');
+    try {
+      const db = getAdminFirestore(app);
+      const owner = context('collaborative-owner'),
+        member = context('collaborative-member');
+      const id = 'collaborative-owner_home';
+      const data = migrateData(null);
+      data.people = [
+        { id: 'a', name: 'Ana', profile: { phone: 'private-phone' } },
+        { id: 'b', name: 'Bia' },
+      ];
+      data.groups = [{ id: 'home', name: 'Casa', memberIds: ['a', 'b'], adminPersonId: 'a' }];
+      data.months = { '2026-11': { a: 100000, b: 300000 } };
+      await createFinanceCloudStore(owner, 'collaborative-owner').save(data, null);
+      const batch = db.batch();
+      batch.set(db.collection('sharedGroups').doc(id), {
+        adminUid: 'collaborative-owner',
+        snapshot: projectSharedGroup(data, 'home'),
+        revision: 1,
+        financeRevision: 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      batch.set(db.collection('groupMemberships').doc(`collaborative-member_${id}`), {
+        uid: 'collaborative-member',
+        groupId: id,
+        personId: 'b',
+        inviteId: `${id}_b`,
+      });
+      batch.set(db.collection('groupInvites').doc(`${id}_b`), {
+        adminUid: 'collaborative-owner',
+        groupId: id,
+        personId: 'b',
+        status: 'accepted',
+        acceptedUid: 'collaborative-member',
+        email: 'collaborative-member@example.com',
+      });
+      await batch.commit();
+      await assertFails(updateDoc(doc(member, 'sharedGroups', id), { revision: 2 }));
+      await assertFails(deleteDoc(doc(member, 'sharedGroups', id)));
+      await assertFails(getDocs(collection(member, 'users', 'collaborative-owner', 'finance')));
+      const execute = (command, uid = 'collaborative-member') =>
+        editSharedGroup({
+          db,
+          timestamp: () => FieldValue.serverTimestamp(),
+          uid,
+          command: { groupId: id, revision: 1, ...command },
+        });
+      const value = {
+        description: 'Luz',
+        amount: 10001,
+        date: '2026-11-01',
+        status: 'paid',
+        payer: 'a',
+        participants: ['a', 'b'],
+        split: 'proportional',
+        percentages: {},
+      };
+      const results = await Promise.allSettled(
+        ['one', 'two'].map((expenseId) =>
+          execute({ action: 'upsert', changes: [{ kind: 'expenses', id: expenseId, value }] }),
+        ),
+      );
+      assert.equal(results.filter((item) => item.status === 'fulfilled').length, 1);
+      assert.equal(results.find((item) => item.status === 'rejected').reason.status, 409);
+      const restored = decodeFinance(
+        (await getDocs(collection(owner, 'users', 'collaborative-owner', 'finance'))).docs.map(
+          (item) => ({ ...item.data(), id: item.id }),
+        ),
+      );
+      assert.equal(restored.revision, 2);
+      assert.equal(restored.data.expenses.length, 1);
+      assert.equal(restored.data.people[0].profile.phone, 'private-phone');
+      const shared = (await getDoc(doc(member, 'sharedGroups', id))).data();
+      assert.equal(shared.financeRevision, 2);
+      assert.deepEqual(shared.snapshot.expenses[0].shares, { a: 2500, b: 7501 });
+      assert.ok(!JSON.stringify(shared).includes('private-phone'));
+      await assert.rejects(() => execute({ revision: 2, action: 'delete' }), { status: 403 });
+      await assert.rejects(
+        () => execute({ revision: 2, action: 'rename', name: 'Inválido' }, 'outsider'),
+        { status: 403 },
+      );
+      await db.collection('groupInvites').doc(`${id}_b`).update({ status: 'revoked' });
+      await assert.rejects(() => execute({ revision: 2, action: 'rename', name: 'Revogado' }), {
+        status: 403,
+      });
+    } finally {
+      await deleteAdminApp(app);
+    }
+  },
+);
 test(
   'permanent purge physically deletes private history and invitations while retaining only a small shared tombstone',
   { skip: !enabled },
