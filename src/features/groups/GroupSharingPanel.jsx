@@ -54,7 +54,7 @@ export function SharedGroupView({ membership, referenceMonth, tab, onNavigate })
   if (!group) return <p role="status">Carregando grupo…</p>;
   return (
     <>
-      {!referenceMonth && (
+      {!referenceMonth && tab !== 'groups' && (
         <label className="field">
           Mês
           <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
@@ -635,10 +635,11 @@ export function GroupSharingPanel({
           <span className="pill">{memberships.length}</span>
         </div>
         <p className="muted">
-          Consulte suas despesas, saldos e repasses. Rendas e despesas pessoais permanecem privadas.
+          Consulte os participantes e convide novos membros. Os dados cadastrais são gerenciados
+          pelo administrador; as despesas e os saldos ficam no espaço Grupo.
         </p>
         {memberships.map((membership) => (
-          <SharedGroupView key={membership.id} membership={membership} />
+          <SharedGroupView key={membership.id} membership={membership} tab="groups" />
         ))}
         {!memberships.length && (
           <div className="empty">

@@ -78,7 +78,7 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 ### Espaços de grupo
 
 - Exclusão de grupos com histórico preservado para consulta, ou exclusão definitiva do histórico por confirmação digitada. A limpeza definitiva remove os registros financeiros daquele grupo e os convites, preserva pessoas e rendas e mantém apenas um pequeno marcador remoto de bloqueio.
-- Participantes ativos usam os mesmos painéis para cadastrar e editar despesas, trazer recorrentes, ajustar orçamento, criar metas e aportes, renomear o grupo e convidar pessoas. Podem confirmar e estornar os próprios recebimentos. Não podem excluir registros, remover membros, apagar grupos ou limpar históricos. A edição compartilhada exige a API autenticada do servidor; os dados privados das contas permanecem isolados.
+- Participantes ativos usam os mesmos painéis para cadastrar e editar despesas, trazer recorrentes, ajustar orçamento e criar metas e aportes. Podem confirmar e estornar os próprios recebimentos e convidar novos membros somente na aba **Pessoas e grupos**. Os dados cadastrais do grupo são editados apenas pelo administrador. Participantes não podem alterar vínculos existentes, excluir registros, remover membros, apagar grupos ou limpar históricos. A edição compartilhada exige a API autenticada do servidor; os dados privados das contas permanecem isolados.
 
 - Crie vários grupos e escolha seus membros entre as pessoas cadastradas.
 - Divida cada despesa igualmente, proporcionalmente à renda ou com percentuais personalizados que somam 100%.

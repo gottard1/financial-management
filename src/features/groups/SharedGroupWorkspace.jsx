@@ -13,6 +13,7 @@ import { sharedGroupData, sharedGroupChanges } from '../../domain/groups/sharedG
 import { ledgerRecords, sharedMonthOverview } from '../../domain/settlements/sharedSettlements.js';
 import { editSharedGroup } from '../../infrastructure/firebase/sharedGroupEditingRepository.js';
 import { saveSharedSettlement } from '../../infrastructure/firebase/sharedSettlementRepository.js';
+import { SharedGroupInvitationPanel } from './SharedGroupInvitationPanel.jsx';
 
 const amountText = (amount) => (amount / 100).toFixed(2).replace('.', ',');
 function expenseInput(draft, scope) {
@@ -47,7 +48,7 @@ export function SharedGroupWorkspace({
   execute = editSharedGroup,
 }) {
   const [localTab, setTab] = useState('overview');
-  const selectedTab = onNavigate ? tab : localTab;
+  const selectedTab = tab === 'groups' ? 'groups' : onNavigate ? tab : localTab;
   const go = onNavigate || setTab;
   const [filter, setFilter] = useState('all');
   const [draft, setDraft] = useState(null);
@@ -57,7 +58,6 @@ export function SharedGroupWorkspace({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [settings, showSettings] = useState(false);
   const lock = useRef(false),
     dialog = useRef(null),
     newId = useRef('');
@@ -226,16 +226,16 @@ export function SharedGroupWorkspace({
   };
   return (
     <>
-      <div className="notice">
-        <span>
-          <strong>{snapshot.name}</strong> · Você pode criar e editar dados do grupo. Exclusões e
-          remoção de membros são restritas ao administrador.
-        </span>
-        <button className="button secondary" onClick={() => showSettings(!settings)}>
-          Dados e participantes do grupo
-        </button>
-      </div>
-      {!onNavigate && (
+      {selectedTab !== 'groups' && (
+        <div className="notice">
+          <span>
+            <strong>{snapshot.name}</strong> · Você pode criar e editar lançamentos financeiros. Os
+            dados cadastrais, as exclusões e a remoção de membros são gerenciados pelo
+            administrador.
+          </span>
+        </div>
+      )}
+      {!onNavigate && selectedTab !== 'groups' && (
         <nav className="group-subnav" aria-label="Seções do grupo compartilhado">
           {[
             ['overview', 'Visão do grupo'],
@@ -267,111 +267,42 @@ export function SharedGroupWorkspace({
       )}
       {busy && <p role="status">Salvando alterações do grupo…</p>}
       <div inert={busy ? true : undefined}>
-        {settings && (
-          <section className="panel">
-            <h2>Dados e participantes do grupo</h2>
-            <form
-              key={snapshot.name}
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const name = new FormData(event.currentTarget).get('name');
-                try {
-                  await mutate({ action: 'rename', name });
-                } catch {}
-              }}
-            >
-              <label className="field">
-                Nome do grupo
-                <input name="name" required maxLength={80} defaultValue={snapshot.name} />
-              </label>
-              <button className="button primary">Salvar nome do grupo</button>
-            </form>
-            <h3>Participantes</h3>
-            <ul>
-              {snapshot.people.map((person) => (
-                <li key={person.id}>
-                  {person.name}
-                  {!active.includes(person.id)
-                    ? ' · Removido'
-                    : person.id === snapshot.adminPersonId
-                      ? ' · Administrador'
-                      : ''}
-                </li>
-              ))}
-            </ul>
-            <h3>Convidar participante</h3>
-            <form
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                const values = new FormData(form);
-                try {
-                  await mutate({
-                    action: 'invite',
-                    email: values.get('email'),
-                    name: values.get('name'),
-                    personId: values.get('personId') || undefined,
-                  });
-                  form.reset();
-                  setNotice(
-                    'Convite criado. A pessoa deve entrar com Google e aceitar em Pessoas e grupos.',
-                  );
-                } catch {}
-              }}
-            >
-              <div className="form-grid">
-                <label className="field">
-                  E-mail
-                  <input name="email" type="email" required maxLength={254} />
-                </label>
-                <label className="field">
-                  Nome no grupo
-                  <input name="name" required maxLength={60} />
-                </label>
-                <label className="field">
-                  Vincular a um participante
-                  <select name="personId">
-                    <option value="">Novo participante</option>
-                    {snapshot.people
-                      .filter(
-                        (person) =>
-                          active.includes(person.id) && person.id !== snapshot.adminPersonId,
-                      )
-                      .map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </div>
-              <button className="button primary">Convidar participante</button>
-            </form>
-          </section>
+        {selectedTab === 'groups' && (
+          <SharedGroupInvitationPanel
+            snapshot={snapshot}
+            onInvite={async (invitation) => {
+              await mutate({ action: 'invite', ...invitation });
+              setNotice(
+                'Convite criado. A pessoa deve entrar com Google e aceitar em Pessoas e grupos.',
+              );
+            }}
+          />
         )}
-        {overview ? (
-          <>
-            {selectedTab === 'overview' && <MonthlyOverview {...overview} {...common} go={go} />}
-            {selectedTab === 'budget' && (
-              <BudgetPanel key={scope + month} {...common} setData={setData} notify={setNotice} />
-            )}
-            {selectedTab === 'savings' && (
-              <SavingsPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
-            )}
-            {selectedTab === 'settlements' && (
-              <SettlementsPanel
-                {...common}
-                setData={setData}
-                notify={setNotice}
-                storageNamespace={user?.uid}
-              />
-            )}
-          </>
-        ) : (
-          <p className="notice">
-            O administrador precisa atualizar os dados compartilhados para disponibilizar o resumo.
-          </p>
-        )}
+        {selectedTab !== 'groups' &&
+          (overview ? (
+            <>
+              {selectedTab === 'overview' && <MonthlyOverview {...overview} {...common} go={go} />}
+              {selectedTab === 'budget' && (
+                <BudgetPanel key={scope + month} {...common} setData={setData} notify={setNotice} />
+              )}
+              {selectedTab === 'savings' && (
+                <SavingsPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
+              )}
+              {selectedTab === 'settlements' && (
+                <SettlementsPanel
+                  {...common}
+                  setData={setData}
+                  notify={setNotice}
+                  storageNamespace={user?.uid}
+                />
+              )}
+            </>
+          ) : (
+            <p className="notice">
+              O administrador precisa atualizar os dados compartilhados para disponibilizar o
+              resumo.
+            </p>
+          ))}
         {selectedTab === 'comparison' && (
           <MonthlyComparisonPanel
             key={scope + month}

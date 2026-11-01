@@ -160,7 +160,7 @@ export function MonthlyComparisonPanel({ data, scope, month, mode, workspace }) 
                         <td colSpan={4}>Revisar: {row.error}</td>
                       ) : (
                         <>
-                          <td>{money(row.income)}</td>
+                          <td>{row.income === undefined ? 'Privada' : money(row.income)}</td>
                           <td>
                             <strong>{money(row.total)}</strong>
                           </td>

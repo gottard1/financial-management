@@ -78,6 +78,8 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
       } else if (command.action === 'recurring') {
         next = copySharedRecurring(next, groupId, command.month, command.entries);
       } else if (command.action === 'rename') {
+        if (group.adminUid !== uid)
+          throw problem(403, 'Somente o administrador pode alterar os dados cadastrais do grupo.');
         const name = command.name?.trim();
         if (!name || name.length > 80) throw new Error('Informe um nome de até 80 caracteres.');
         next = {
@@ -86,6 +88,19 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
         };
       } else if (command.action === 'invite') {
         const localGroup = next.groups.find((item) => item.id === groupId);
+        if (
+          group.adminUid !== uid &&
+          (command.personId ||
+            next.people.some(
+              (person) =>
+                localGroup.memberIds.includes(person.id) &&
+                person.inviteEmail === command.email?.trim().toLowerCase(),
+            ))
+        )
+          throw problem(
+            403,
+            'Participantes só podem convidar novos membros, sem alterar vínculos existentes.',
+          );
         if (
           command.personId &&
           (!activeGroupMembers(localGroup).includes(command.personId) ||

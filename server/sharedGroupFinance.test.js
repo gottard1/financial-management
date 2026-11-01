@@ -10,7 +10,7 @@ function harness() {
     ...migrateData(null),
     people: [
       { id: 'a', name: 'Ana', profile: { phone: 'private' } },
-      { id: 'b', name: 'Bia' },
+      { id: 'b', name: 'Bia', inviteEmail: 'bia@example.com' },
     ],
     groups: [{ id: 'home', name: 'Casa', memberIds: ['a', 'b'], adminPersonId: 'a' }],
     months: { '2026-11': { a: 100000, b: 300000 } },
@@ -157,7 +157,7 @@ test('revoked, removed and foreign accounts cannot write; deletion and privilege
   });
   assert.equal(read().revision, 1);
 });
-test('preview never writes and members can rename or invite without changing existing membership', async () => {
+test('preview never writes, only administrators rename, and members can invite new participants', async () => {
   const { execute, rows, read } = harness();
   const before = JSON.stringify([...rows]);
   assert.deepEqual(
@@ -170,7 +170,11 @@ test('preview never writes and members can rename or invite without changing exi
     { a: 2500, b: 7501 },
   );
   assert.equal(JSON.stringify([...rows]), before);
-  await execute('member', { action: 'rename', name: 'Novo nome' });
+  await assert.rejects(() => execute('member', { action: 'rename', name: 'Novo nome' }), {
+    status: 403,
+  });
+  assert.equal(JSON.stringify([...rows]), before);
+  await execute('owner', { action: 'rename', name: 'Novo nome' });
   assert.equal(read().data.groups[0].name, 'Novo nome');
   await execute('member', {
     revision: 2,
@@ -185,6 +189,36 @@ test('preview never writes and members can rename or invite without changing exi
     .filter(([path]) => path.startsWith('groupInvites/'))
     .map(([, value]) => value);
   assert.equal(invitations.find((item) => item.email === 'nova@example.com').status, 'pending');
+});
+
+test('member invitations cannot modify or reactivate existing participants', async () => {
+  const { execute, rows, read } = harness();
+  const before = JSON.stringify([...rows]);
+  for (const command of [
+    { email: 'other@example.com', name: 'Outra', personId: 'b' },
+    { email: '  BIA@example.com ', name: 'Outro nome' },
+  ])
+    await assert.rejects(() => execute('member', { action: 'invite', ...command }), {
+      status: 403,
+    });
+  assert.equal(JSON.stringify([...rows]), before);
+  assert.equal(read().data.groups[0].name, 'Casa');
+  const ownerRecord = rows.get('users/owner/finance/people:a');
+  ownerRecord.payload = JSON.stringify({
+    ...JSON.parse(ownerRecord.payload),
+    inviteEmail: 'ana@example.com',
+  });
+  const groupRecord = rows.get('users/owner/finance/groups:home');
+  groupRecord.payload = JSON.stringify({
+    ...JSON.parse(groupRecord.payload),
+    removedMemberIds: ['a'],
+  });
+  rows.get('sharedGroups/owner_home').snapshot.activeMemberIds = ['b'];
+  await assert.rejects(
+    () => execute('member', { action: 'invite', email: 'ana@example.com', name: 'Ana' }),
+    { status: 403 },
+  );
+  assert.deepEqual(read().data.groups[0].removedMemberIds, ['a']);
 });
 test('API rejects unauthenticated, non-Google and unverified sessions and hides internal failures', async () => {
   let token = { uid: 'member', email_verified: true, firebase: { sign_in_provider: 'google.com' } };
