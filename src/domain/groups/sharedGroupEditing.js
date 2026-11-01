@@ -49,7 +49,7 @@ export function sharedGroupData(snapshot) {
           ),
       },
     ],
-    expenses: snapshot.expenses,
+    expenses: snapshot.expenses.map((expense) => ({ ...expense, workspace: scope })),
     goals: snapshot.goals || [],
     contributions: snapshot.contributions || [],
     plans: Object.fromEntries(

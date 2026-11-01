@@ -21,6 +21,8 @@ export function ExpenseDialog({
   error,
 }) {
   const shared = draft.workspace.startsWith('group:');
+  const completePreview =
+    preview && draft.participants.every((id) => Number.isSafeInteger(preview[id]));
   const nameOf = (id) => data.people.find((person) => person.id === id)?.name || 'Pessoa';
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   function setRecurring(enabled) {
@@ -302,7 +304,7 @@ export function ExpenseDialog({
           </div>
         </fieldset>
         <div className="notice expense-preview" aria-live="polite">
-          {preview ? (
+          {completePreview ? (
             <div>
               <strong>{shared ? 'Assim fica a divisão' : 'Este gasto é pessoal'}</strong>
               {draft.participants.map((id) => (
@@ -317,7 +319,12 @@ export function ExpenseDialog({
               </small>
             </div>
           ) : (
-            <p>{previewError || 'Preencha o valor para conferir antes de salvar.'}</p>
+            <p>
+              {previewError ||
+                (draft.amount
+                  ? 'Atualizando a divisão…'
+                  : 'Preencha o valor para conferir antes de salvar.')}
+            </p>
           )}
         </div>
         {error && (

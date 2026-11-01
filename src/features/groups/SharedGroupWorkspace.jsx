@@ -53,7 +53,7 @@ export function SharedGroupWorkspace({
   const [filter, setFilter] = useState('all');
   const [draft, setDraft] = useState(null);
   const [recurring, setRecurring] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [previewResult, setPreviewResult] = useState(null);
   const [previewError, setPreviewError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -62,6 +62,10 @@ export function SharedGroupWorkspace({
     dialog = useRef(null),
     newId = useRef('');
   const snapshot = group.snapshot;
+  const preview =
+    previewResult?.draft === draft && previewResult?.revision === group.revision
+      ? previewResult.shares
+      : null;
   const scope = `group:${snapshot.id}`;
   const data = sharedGroupData(snapshot);
   data.settlements = [
@@ -90,7 +94,7 @@ export function SharedGroupWorkspace({
     setError('');
   }, [month]);
   useEffect(() => {
-    setPreview(null);
+    setPreviewResult(null);
     setPreviewError('');
     if (!draft?.amount) return;
     let current = true;
@@ -118,7 +122,7 @@ export function SharedGroupWorkspace({
             })
           ).shares;
         }
-        if (current) setPreview(shares);
+        if (current) setPreviewResult({ draft, revision: group.revision, shares });
       } catch (err) {
         if (current) setPreviewError(err.message);
       }

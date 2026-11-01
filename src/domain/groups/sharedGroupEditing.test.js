@@ -106,6 +106,27 @@ test('shared editing denies deletes, role escalation, other scopes, invalid mone
     /administrador/,
   );
 });
+
+test('shared expenses recover their workspace and payment edits round-trip without modifying the public snapshot', () => {
+  const original = fixture();
+  const snapshot = projectSharedGroup(original, 'g');
+  const untouched = JSON.stringify(snapshot);
+  const previous = sharedGroupData(snapshot);
+  assert.equal(previous.expenses[0].workspace, 'group:g');
+  assert.equal(snapshot.expenses[0].workspace, undefined);
+  const next = {
+    ...previous,
+    expenses: previous.expenses.map((expense) => ({ ...expense, payer: 'b', amount: 12000 })),
+  };
+  const changes = sharedGroupChanges(previous, next);
+  assert.equal(changes[0].value.workspace, undefined);
+  const saved = applySharedGroupChanges(original, 'g', changes);
+  const restored = sharedGroupData(projectSharedGroup(saved, 'g')).expenses[0];
+  assert.equal(restored.workspace, 'group:g');
+  assert.equal(restored.payer, 'b');
+  assert.equal(restored.amount, 12000);
+  assert.equal(JSON.stringify(snapshot), untouched);
+});
 test('shared forms generate allowed patches and recurring copying preserves origin and rejects duplicates', () => {
   const original = fixture();
   const publicData = sharedGroupData(projectSharedGroup(original, 'g'));
