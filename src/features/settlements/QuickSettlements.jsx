@@ -126,7 +126,7 @@ export function QuickSettlements({
         </p>
       )}
       {last && (
-        <div className="notice" role="status">
+        <div className="notice notice-with-action" role="status">
           <p>
             Recebimento de {money(last.amount)} de {nameOf(last.from)} para {nameOf(last.to)}{' '}
             confirmado.
