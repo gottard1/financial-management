@@ -7,6 +7,20 @@ export async function writeSharedSettlement(db, uid, groupId, options) {
     const ref = doc(groupRef, 'settlementMonths', options.month);
     const groupDoc = await transaction.get(groupRef);
     const ledgerDoc = await transaction.get(ref);
+    let reportRef, reportDoc;
+    if (options.voidId) {
+      reportRef = doc(groupRef, 'paymentReports', options.voidId);
+      reportDoc = await transaction.get(reportRef);
+    } else if (options.transfer) {
+      const key = encodeURIComponent(
+        `${options.month}|${options.transfer.from}|${options.transfer.to}`,
+      );
+      const pending = await transaction.get(doc(groupRef, 'paymentReportLocks', key));
+      if (pending.exists())
+        throw new Error(
+          'Este acerto já aguarda confirmação. Responda à solicitação de recebimento.',
+        );
+    }
     if (!groupDoc.exists() || groupDoc.data().deleted)
       throw new Error('Este grupo não está disponível.');
     const group = groupDoc.data();
@@ -20,5 +34,7 @@ export async function writeSharedSettlement(db, uid, groupId, options) {
     if (next.records.at(-1).to !== personId)
       throw new Error('Você só pode confirmar o dinheiro que recebeu.');
     transaction.set(ref, { ...next, baseRevision: group.revision, updatedAt: serverTimestamp() });
+    if (reportDoc?.exists() && reportDoc.data().status === 'confirmed')
+      transaction.update(reportRef, { status: 'reversed', updatedAt: serverTimestamp() });
   });
 }

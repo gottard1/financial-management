@@ -15,6 +15,8 @@ export function OverviewPanel({
   receiverId,
   onSharedReceive,
   onSharedUndo,
+  onReport,
+  pendingReports,
   receiverUid,
   readOnly = false,
 }) {
@@ -152,6 +154,8 @@ export function OverviewPanel({
                 receiverId,
                 onSharedReceive,
                 onSharedUndo,
+                onReport,
+                pendingReports,
               }}
               readOnly={!onSharedReceive && (readOnly || !commitData)}
             />

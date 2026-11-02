@@ -159,6 +159,16 @@ A persistência do hook valida e salva sincronamente antes de publicar o novo es
 
 ## Histórico de acertos
 
+### Solicitações de recebimento
+
+`domain/settlements/paymentReports` valida solicitações separadamente dos recebimentos. O campo opcional `paymentReports` é migrado para uma lista vazia e integrado ao codec privado, preservando documentos antigos sem essa seção. Solicitações pendentes ou recusadas nunca participam dos cálculos financeiros.
+
+No compartilhamento, a API autenticada existente delega as ações `report-payment`, `confirm-payment` e `reject-payment` para `server/groupPaymentReports`. O servidor deriva o participante da associação autenticada, confirma o vínculo da conta destinatária e revalida o saldo atual. A confirmação atualiza `paymentReports` e `settlementMonths` na mesma transação. `paymentReportLocks` serializa solicitações pendentes por competência e par de participantes; recebimentos diretos consultam o mesmo marcador para não duplicar o fluxo.
+
+As regras negam a criação direta de solicitações pelo cliente. Somente a API pode registrar ou responder; o destinatário pode marcar um recebimento como desfeito apenas junto ao estorno validado no ledger. A exclusão definitiva do histórico limpa solicitações e marcadores. Nenhuma dessas projeções expõe renda, telefone ou outros dados privados.
+
+`usePaymentInbox` agrega as solicitações dos grupos autorizados e os convites recebidos. A caixa pessoal filtra pagador/destinatário por UID; ações de confirmação não dependem apenas de controles visuais. A abertura de uma notificação não altera valores nem representa confirmação.
+
 `domain/settlements` ajusta somente os saldos e reutiliza o solver de transferências do domínio de despesas. Os lançamentos financeiros originais não são duplicados como entradas/saídas. O formato v3 recebe `settlements: []` por padrão, preservando a compatibilidade com registros existentes.
 
 `receiptRepository` isola arquivos em IndexedDB por namespace. A interface guarda somente metadados no registro financeiro; a exportação JSON não inclui blobs. Falhas de gravação do registro permitem remover o anexo novo; estornos preservam arquivo e histórico. Uma futura integração cloud deve substituir esse adaptador, com autorização por grupo e tratamento de falhas entre operações de arquivo e banco.

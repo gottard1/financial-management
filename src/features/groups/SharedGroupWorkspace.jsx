@@ -14,6 +14,8 @@ import { ledgerRecords, sharedMonthOverview } from '../../domain/settlements/sha
 import { editSharedGroup } from '../../infrastructure/firebase/sharedGroupEditingRepository.js';
 import { saveSharedSettlement } from '../../infrastructure/firebase/sharedSettlementRepository.js';
 import { SharedGroupInvitationPanel } from './SharedGroupInvitationPanel.jsx';
+import { MonthlySummary } from '../overview/MonthlySummary.jsx';
+import { PaymentRequests } from '../notifications/NotificationsPanel.jsx';
 
 const amountText = (amount) => (amount / 100).toFixed(2).replace('.', ',');
 function expenseInput(draft, scope) {
@@ -46,9 +48,12 @@ export function SharedGroupWorkspace({
   onNavigate,
   onSaved,
   execute = editSharedGroup,
+  paymentReports = [],
+  onReport,
+  onRespond,
 }) {
   const [localTab, setTab] = useState('overview');
-  const selectedTab = tab === 'groups' ? 'groups' : onNavigate ? tab : localTab;
+  const selectedTab = ['groups', 'members'].includes(tab) ? 'groups' : onNavigate ? tab : localTab;
   const go = onNavigate || setTab;
   const [filter, setFilter] = useState('all');
   const [draft, setDraft] = useState(null);
@@ -227,6 +232,8 @@ export function SharedGroupWorkspace({
     receiverUid: user?.uid,
     onSharedReceive,
     onSharedUndo,
+    onReport,
+    pendingReports: paymentReports.filter((item) => item.status === 'pending'),
   };
   return (
     <>
@@ -293,12 +300,21 @@ export function SharedGroupWorkspace({
                 <SavingsPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
               )}
               {selectedTab === 'settlements' && (
-                <SettlementsPanel
-                  {...common}
-                  setData={setData}
-                  notify={setNotice}
-                  storageNamespace={user?.uid}
-                />
+                <>
+                  <MonthlySummary {...common} />
+                  <PaymentRequests
+                    reports={paymentReports.filter((item) => item.status === 'pending')}
+                    onRespond={onRespond}
+                    userUid={user?.uid}
+                    compact
+                  />
+                  <SettlementsPanel
+                    {...common}
+                    setData={setData}
+                    notify={setNotice}
+                    storageNamespace={user?.uid}
+                  />
+                </>
               )}
             </>
           ) : (

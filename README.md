@@ -60,6 +60,18 @@ O workflow `.github/workflows/validate.yml` executa a mesma verificação em pus
 
 ## Funcionalidades
 
+### Navegação e notificações
+
+- **Meu financeiro** e **Meus grupos** são espaços separados na navegação. As abas financeiras pertencem ao espaço selecionado; no celular, um seletor dá acesso às mesmas seções.
+- **Perfil e renda** concentra os dados pessoais privados. A foto da conta Google aparece no perfil e na identificação da conta, com iniciais como alternativa.
+- **Conta e dados** reúne sessão, sincronização e exportação de backup. Arquivos de comprovantes continuam locais.
+- **Notificações** reúne convites recebidos e atualizações dos seus pagamentos, em todos os grupos ativos.
+- Quem deve pode **informar o pagamento**, que fica pendente e não abate a dívida. Somente a pessoa destinatária pode confirmar ou responder **Não recebi**. Quem recebe continua podendo registrar diretamente um recebimento integral ou parcial.
+- A confirmação revalida o saldo e grava recebimento e resposta na mesma transação. Uma solicitação pendente por par de participantes e competência evita duplicidades. Estornos preservam o histórico.
+- Grupos compartilhados exigem que o destinatário tenha aceitado o convite e vinculado sua conta. Publique as regras de `firestore.rules` atualizadas e disponibilize a API `/api/group-finance` para habilitar o novo fluxo remoto.
+
+O redesign mantém Firebase nesta etapa. Não há migração para Supabase nem upload de fotos próprias; a imagem exibida é a disponibilizada pela conta Google.
+
 ### Perfil
 
 - A aba **Perfil** reúne os dados pessoais da própria conta e a renda e os benefícios de cada mês.

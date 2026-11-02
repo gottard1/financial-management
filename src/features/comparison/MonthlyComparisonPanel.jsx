@@ -117,7 +117,7 @@ export function MonthlyComparisonPanel({ data, scope, month, mode, workspace }) 
             </article>
           </div>
           <section className="panel">
-            <h3>Evolução dos gastos</h3>
+            <h3>Evolução dos gastos (R$)</h3>
             <div
               className="comparison-chart"
               role="img"
@@ -125,7 +125,14 @@ export function MonthlyComparisonPanel({ data, scope, month, mode, workspace }) 
             >
               {comparison.rows.map((row) => (
                 <div className="comparison-chart-column" key={row.month}>
-                  <small>{row.error ? 'Revisar' : money(row.total)}</small>
+                  <small>
+                    {row.error
+                      ? 'Revisar'
+                      : (row.total / 100).toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                  </small>
                   <div className="comparison-chart-track">
                     <div
                       className={'comparison-chart-bar' + (row.error ? ' invalid' : '')}

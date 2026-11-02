@@ -54,3 +54,35 @@ test('compares deterministically regardless of map order and rejects an oversize
   original.people[0].notes = 'x'.repeat(750001);
   assert.throws(() => encodeFinance(original));
 });
+
+test('legacy cloud orders without payment requests remain compatible', () => {
+  const original = migrateData(null);
+  const legacy = records(original);
+  delete legacy[0].orders.paymentReports;
+  assert.deepEqual(decodeFinance(legacy).data, original);
+});
+
+test('payment requests retain recipient, state and scope across private cloud serialization', () => {
+  const data = migrateData(null);
+  data.people.push({ id: 'payer', name: 'João' });
+  data.groups = [
+    { id: 'plans', name: 'Planos', memberIds: ['person-0', 'payer'], adminPersonId: 'person-0' },
+  ];
+  data.paymentReports = [
+    {
+      id: 'r1',
+      scope: 'group:plans',
+      month: '2026-11',
+      from: 'payer',
+      to: 'person-0',
+      amount: 1200,
+      date: '2026-11-02',
+      requestedBy: 'payer',
+      status: 'pending',
+    },
+  ];
+  assert.deepEqual(decodeFinance(records(data)).data.paymentReports, data.paymentReports);
+  const invalid = structuredClone(data);
+  invalid.paymentReports[0].to = 'stranger';
+  assert.throws(() => encodeFinance(invalid));
+});

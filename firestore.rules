@@ -35,9 +35,9 @@ service cloud.firestore {
       function validRecord() {
         let next = request.resource.data;
         let state = stateAfter();
-        return recordId.matches('(people|groups|expenses|goals|contributions|settlements|income|plans):.*') &&
+        return recordId.matches('(people|groups|expenses|goals|contributions|settlements|paymentReports|income|plans):.*') &&
           next.keys().hasOnly(['kind', 'key', 'payload', 'revision']) && next.key is string &&
-          next.kind in ['people', 'groups', 'expenses', 'goals', 'contributions', 'settlements', 'income', 'plans'] &&
+          next.kind in ['people', 'groups', 'expenses', 'goals', 'contributions', 'settlements', 'paymentReports', 'income', 'plans'] &&
           next.payload is string && next.payload.size() <= 750000 && next.revision == state.revision;
       }
       allow read: if owner();
@@ -50,6 +50,27 @@ service cloud.firestore {
         stateAfter().revision > resource.data.revision;
     }
     match /sharedGroups/{id} {
+      match /paymentReports/{reportId} {
+        allow read: if signedIn() && (owns(id) || participantAccess(id));
+        function reversedWithLedger() {
+          let path = /databases/$(database)/documents/sharedGroups/$(id)/settlementMonths/$(resource.data.month);
+          let ledger = getAfter(path).data;
+          let event = ledger.records[ledger.records.size() - 1];
+          return resource.data.status == 'confirmed' && request.resource.data.status == 'reversed' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+            request.resource.data.updatedAt == request.time && resource.data.toUid == request.auth.uid &&
+            ledger.revision == get(path).data.revision + 1 && event.id == reportId && event.status == 'void';
+        }
+        allow update: if signedIn() && (owns(id) || participantAccess(id)) && reversedWithLedger();
+        // Payment reports and ledger confirmation are written atomically by the authenticated API.
+        allow write: if false;
+        allow delete: if signedIn() && owns(id) && group(id).deleted == true;
+      }
+      match /paymentReportLocks/{lockId} {
+        allow read: if signedIn() && (owns(id) || participantAccess(id));
+        allow write: if false;
+        allow delete: if signedIn() && owns(id) && group(id).deleted == true;
+      }
       match /settlementMonths/{month} {
         function canRead() { return signedIn() && (owns(id) || participantAccess(id)); }
         function emptyLedger() { return { 'revision': 0, 'records': [], 'adjustments': {}, 'ids': {}, 'voided': {} }; }

@@ -1,5 +1,6 @@
 import { splitExpense, summarize } from '../expenses/expenseCalculations.js';
 import { validateInstallments } from '../expenses/recurringExpenses.js';
+import { validatePaymentReport } from '../settlements/paymentReports.js';
 import {
   applySettlements,
   validateSettlementRecord,
@@ -237,6 +238,7 @@ export function migrateData(input) {
       goals: [],
       contributions: [],
       settlements: [],
+      paymentReports: [],
     };
   record(input, 'Backup financeiro');
   if (![1, 2, 3].includes(input.version))
@@ -410,6 +412,14 @@ export function migrateData(input) {
     }
   });
   const settlements = raw.settlements ?? [];
+  const paymentReports = raw.paymentReports ?? [];
+  if (!Array.isArray(paymentReports)) throw new Error('Solicitações de recebimento inválidas.');
+  const reportIds = new Set();
+  paymentReports.forEach((item) => {
+    uniqueId(item.id, reportIds, 'solicitação de recebimento');
+    const members = scopeMembers(context, item.scope);
+    validatePaymentReport(item, members);
+  });
   if (!Array.isArray(settlements)) throw new Error('Repasses inválidos no backup.');
   const settlementIds = new Set();
   settlements.forEach((settlement) => {
@@ -449,6 +459,7 @@ export function migrateData(input) {
     plans,
     goals: goals.map((goal) => ({ ...goal })),
     contributions: contributions.map((contribution) => ({ ...contribution })),
+    paymentReports: paymentReports.map((item) => ({ ...item })),
     settlements: settlements.map((settlement) => ({
       ...settlement,
       ...(settlement.receipt ? { receipt: { ...settlement.receipt } } : {}),

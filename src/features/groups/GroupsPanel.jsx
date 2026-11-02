@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   activeGroupMembers,
   removeGroupMember,
@@ -9,7 +9,15 @@ import {
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { PurgeGroupDialog } from './PurgeGroupDialog.jsx';
 import { removeReceipt } from '../../infrastructure/storage/receiptRepository.js';
-export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, onExport }) {
+export function GroupsPanel({
+  data,
+  setData,
+  commitData,
+  notify,
+  onViewGroup,
+  onExport,
+  selectedGroupId,
+}) {
   const { user, localMode } = useAuth();
   const personFormPanel = useRef(null);
   const groupFormPanel = useRef(null);
@@ -29,6 +37,15 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
   const accountPerson = people.find((person) => person.accountUid === user?.uid && user?.uid);
   const groups = (data.groups || []).filter((group) => !group.deleted);
   const archivedGroups = (data.groups || []).filter((group) => group.deleted);
+  const displayGroups = selectedGroupId
+    ? groups.filter((group) => group.id === selectedGroupId)
+    : groups;
+  useEffect(() => {
+    if (selectedGroupId) {
+      const selected = data.groups.find((group) => group.id === selectedGroupId && !group.deleted);
+      if (selected) editGroup(selected);
+    }
+  }, [selectedGroupId]);
   const editing = groups.find((group) => group.id === editingId);
   const normalize = (name) => name.trim().toLocaleLowerCase('pt-BR');
   function createPerson(event) {
@@ -250,8 +267,8 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
   }
   return (
     <>
-      <div className="two-col groups-forms">
-        <section className="panel" ref={personFormPanel}>
+      <div className={'two-col groups-forms' + (selectedGroupId ? ' group-settings-form' : '')}>
+        <section className="panel" ref={personFormPanel} hidden={Boolean(selectedGroupId)}>
           <p className="eyebrow">QUEM PARTICIPA DOS PLANOS</p>
           <h2>{editingPersonId ? 'Editar nome da pessoa' : 'Cadastrar uma pessoa'}</h2>
           <p className="muted">
@@ -403,7 +420,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
           </form>
         </section>
       </div>
-      <section className="panel">
+      <section className="panel" hidden={Boolean(selectedGroupId)}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">TODAS AS PESSOAS</p>
@@ -456,7 +473,7 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
         )}
         {groups.length ? (
           <div className="groups-grid">
-            {groups.map((group) => (
+            {displayGroups.map((group) => (
               <article className="group-card" key={group.id}>
                 <div className="section-heading">
                   <div>
@@ -517,7 +534,9 @@ export function GroupsPanel({ data, setData, commitData, notify, onViewGroup, on
             ))}
           </div>
         ) : (
-          <div className="empty">Crie um grupo para dividir contas entre duas ou mais pessoas.</div>
+          <div className="empty">
+            Crie um grupo com uma ou mais pessoas para organizar seus planos.
+          </div>
         )}
       </section>
       {archivedGroups.length > 0 && (

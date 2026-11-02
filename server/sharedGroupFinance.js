@@ -8,6 +8,7 @@ import {
 import { prepareEmailInvitation } from '../src/domain/groups/emailInvitation.js';
 import { splitExpense } from '../src/domain/expenses/expenseCalculations.js';
 import { activeGroupMembers } from '../src/domain/groups/groupMembers.js';
+import { editGroupPayment } from './groupPaymentReports.js';
 
 const problem = (status, message) => Object.assign(new Error(message), { status });
 
@@ -19,6 +20,7 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
     const record = await transaction.get(ref);
     const group = record.data();
     if (!record.exists || group.deleted) throw problem(403, 'Grupo indisponível.');
+    let actorId = group.snapshot.adminPersonId;
     if (group.adminUid !== uid) {
       const membership = (
         await transaction.get(db.collection('groupMemberships').doc(`${uid}_${command.groupId}`))
@@ -43,12 +45,15 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
         invite.personId !== membership.personId
       )
         throw problem(403, 'Seu acesso ao grupo foi revogado.');
+      actorId = membership.personId;
     }
     if (group.revision !== command.revision)
       throw problem(
         409,
         'O grupo mudou em outra sessão. Confira os dados atualizados e tente novamente.',
       );
+    if (['report-payment', 'confirm-payment', 'reject-payment'].includes(command.action))
+      return editGroupPayment({ db, transaction, ref, group, actorId, uid, command, timestamp });
     const financeRef = db.collection('users').doc(group.adminUid).collection('finance');
     const records = (await transaction.get(financeRef)).docs.map((item) => ({
       ...item.data(),

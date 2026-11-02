@@ -8,7 +8,15 @@ export function stableJson(data) {
   );
 }
 export const financeJson = (data) => stableJson(migrateData(data));
-const arrays = ['people', 'groups', 'expenses', 'goals', 'contributions', 'settlements'];
+const arrays = [
+  'people',
+  'groups',
+  'expenses',
+  'goals',
+  'contributions',
+  'settlements',
+  'paymentReports',
+];
 export const financeRecordId = (kind, key) => `${kind}:${encodeURIComponent(key)}`;
 
 /** Each expense, person, plan, savings record or income month has its own document. */
@@ -79,7 +87,9 @@ export function decodeFinance(records) {
     plans: Object.fromEntries(sections.plans),
   };
   for (const kind of arrays) {
-    const ids = state.orders[kind];
+    const ids =
+      state.orders[kind] ??
+      (kind === 'paymentReports' && sections[kind].size === 0 ? [] : undefined);
     if (
       !Array.isArray(ids) ||
       ids.length !== sections[kind].size ||

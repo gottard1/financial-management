@@ -1,70 +1,124 @@
 import React from 'react';
-const NAVIGATION = [
-  ['overview', '◫', 'Visão geral', 'Início'],
-  ['expenses', '↔', 'Despesas', 'Gastos'],
-  ['comparison', '▥', 'Comparar meses', 'Meses'],
-  ['budget', '▦', 'Orçamento', 'Plano'],
-  ['savings', '◎', 'Metas e reservas', 'Metas'],
-  ['people', '♧', 'Perfil', 'Perfil'],
-  ['groups', '♙', 'Pessoas e grupos', 'Grupos'],
-];
-export function AppSidebar({ tab, onNavigate, onExport, cloudEnabled = false }) {
+import { Icon } from '../ui/Icon.jsx';
+import { Avatar } from '../ui/Avatar.jsx';
+
+export function AppSidebar({
+  tab,
+  onNavigate,
+  mode,
+  groupId,
+  groups = [],
+  onSelectSpace,
+  userName,
+  notificationCount = 0,
+  photoURL,
+}) {
   return (
-    <aside className="sidebar">
+    <aside className="sidebar redesign-sidebar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true">
-          ↗
+        <span className="brand-mark">
+          <Icon name="sprout" />
         </span>
-        contas &amp; planos<span className="pill">{cloudEnabled ? 'CONTA' : 'LOCAL'}</span>
+        Contas &amp; Planos
       </div>
-      <button
-        type="button"
-        className="sidebar-mobile-export"
-        onClick={onExport}
-        aria-label="Exportar backup"
-        title="Exportar backup"
-      >
-        ↓
-      </button>
-      <p className="eyebrow">SEU ESPAÇO FINANCEIRO</p>
-      <nav className="app-navigation" aria-label="Navegação principal">
-        {NAVIGATION.map(([id, icon, title, mobile]) => (
+      <nav className="space-navigation" aria-label="Espaços financeiros">
+        <section>
+          <p className="eyebrow">Individual</p>
           <button
             type="button"
-            className={'nav-item ' + (tab === id ? 'active' : '')}
-            aria-current={tab === id ? 'page' : undefined}
-            aria-label={title}
-            key={id}
-            onClick={() => onNavigate(id)}
+            className={
+              'space-link ' +
+              (mode === 'individual' &&
+              !['people', 'groups', 'account', 'notifications'].includes(tab)
+                ? 'active'
+                : '')
+            }
+            onClick={() => onSelectSpace('individual')}
           >
-            <span className="nav-icon" aria-hidden="true">
-              {icon}
+            <span className="space-icon">
+              <Icon name="user" />
             </span>
-            <span className="nav-label">{title}</span>
-            <span className="nav-label-mobile" aria-hidden="true">
-              {mobile}
+            <span>
+              <strong>Meu financeiro</strong>
+              <small>Privado · só você</small>
             </span>
           </button>
-        ))}
+        </section>
+        <section>
+          <p className="eyebrow">Meus grupos</p>
+          <div className="sidebar-groups">
+            {groups
+              .filter((group) => !group.deleted)
+              .map((group) => (
+                <button
+                  type="button"
+                  key={group.id}
+                  className={
+                    'space-link ' +
+                    (mode === 'group' &&
+                    groupId === group.id &&
+                    !['people', 'groups', 'account', 'notifications'].includes(tab)
+                      ? 'active'
+                      : '')
+                  }
+                  onClick={() => onSelectSpace('group', group.id)}
+                >
+                  <span className="space-icon">
+                    <Icon name="users" />
+                  </span>
+                  <span>
+                    <strong>{group.name}</strong>
+                    <small>
+                      {group.memberIds
+                        ? `${group.memberIds.length - (group.removedMemberIds?.length || 0)} participante(s)`
+                        : 'Grupo compartilhado'}
+                    </small>
+                  </span>
+                </button>
+              ))}
+          </div>
+          <button
+            type="button"
+            className="text-button sidebar-create"
+            onClick={() => onNavigate('groups')}
+          >
+            <Icon name="plus" /> Criar ou gerenciar grupos
+          </button>
+        </section>
       </nav>
-      <div className="sidebar-bottom">
-        <p>
-          Seus números.
-          <br />
-          <strong>Seus próximos passos.</strong>
-        </p>
-        <small>
-          {cloudEnabled
-            ? 'Dados financeiros privados na sua conta.'
-            : 'Dados apenas neste navegador.'}
-          <br />
-          {cloudEnabled
-            ? 'Comprovantes permanecem locais.'
-            : 'Sem sincronização entre dispositivos.'}
-        </small>
-        <button type="button" className="button secondary" onClick={onExport}>
-          ↓ Exportar backup
+      <nav className="account-navigation" aria-label="Minha conta">
+        <button
+          type="button"
+          className={tab === 'notifications' ? 'active' : ''}
+          onClick={() => onNavigate('notifications')}
+        >
+          <Icon name="bell" />
+          Notificações
+          {notificationCount > 0 && <span className="notification-count">{notificationCount}</span>}
         </button>
+        <button
+          type="button"
+          className={tab === 'people' ? 'active' : ''}
+          onClick={() => onNavigate('people')}
+        >
+          <Icon name="user" />
+          Perfil e renda
+        </button>
+        <button
+          type="button"
+          className={tab === 'account' ? 'active' : ''}
+          onClick={() => onNavigate('account')}
+        >
+          <Icon name="settings" />
+          Conta e dados
+        </button>
+      </nav>
+      <div className="sidebar-identity">
+        <Avatar name={userName || 'Você'} photoURL={photoURL} />
+        <div>
+          <strong>{userName || 'Você'}</strong>
+          <small>Seu espaço financeiro</small>
+        </div>
       </div>
     </aside>
   );

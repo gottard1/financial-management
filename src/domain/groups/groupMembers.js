@@ -18,6 +18,7 @@ export function groupHistoryCount(data, groupId) {
   return (
     data.expenses.filter((item) => item.workspace === scope).length +
     data.settlements.filter((item) => item.scope === scope).length +
+    (data.paymentReports || []).filter((item) => item.scope === scope).length +
     data.goals.filter((item) => item.scope === scope).length +
     data.contributions.filter((item) => item.scope === scope).length +
     Object.keys(data.plans).filter((key) => key.startsWith(`${scope}|`)).length
@@ -44,8 +45,8 @@ export function purgeGroupHistoryBatch(data, groupId, limit = 300) {
   let remaining = limit;
   const next = { ...data };
   // Contributions must be removed before their goals.
-  for (const key of ['contributions', 'expenses', 'settlements', 'goals']) {
-    next[key] = data[key].filter((item) => {
+  for (const key of ['contributions', 'expenses', 'settlements', 'paymentReports', 'goals']) {
+    next[key] = (data[key] || []).filter((item) => {
       if (remaining > 0 && (key === 'expenses' ? item.workspace : item.scope) === scope) {
         remaining -= 1;
         return false;

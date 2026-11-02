@@ -45,8 +45,9 @@ function harness() {
   ]);
   const ref = (path, query = false) => ({
     path,
+    id: path.split('/').at(-1),
     query,
-    doc: (id) => ref(`${path}/${id}`),
+    doc: (id) => ref(`${path}/${id || crypto.randomUUID()}`),
     collection: (id) => ref(`${path}/${id}`, true),
   });
   const snapshot = (path) => ({
@@ -72,10 +73,13 @@ function harness() {
               }
             : snapshot(target.path),
         set: (target, value) => writes.push([target.path, value]),
+        delete: (target) => writes.push([target.path, undefined]),
         update: (target, value) =>
           writes.push([target.path, { ...rows.get(target.path), ...value }]),
       });
-      writes.forEach(([path, value]) => rows.set(path, value));
+      writes.forEach(([path, value]) =>
+        value === undefined ? rows.delete(path) : rows.set(path, value),
+      );
       return result;
     },
   };
@@ -257,4 +261,112 @@ test('API rejects unauthenticated, non-Google and unverified sessions and hides 
   const response = await request();
   assert.equal(response.code, 500);
   assert.ok(!response.body.error.includes('secret'));
+});
+
+test('payer reports do not settle debt; only the receiver resolves the request, exactly once', async () => {
+  const h = harness();
+  await h.execute('member', {
+    action: 'upsert',
+    changes: [{ kind: 'expenses', id: 'bill', value: bill }],
+  });
+  const command = {
+    revision: 2,
+    action: 'report-payment',
+    month: '2026-11',
+    date: '2026-11-02',
+    transfer: {
+      from: 'b',
+      to: 'a',
+      amount: 7501,
+      scope: 'group:forged',
+      id: 'forged',
+      toUid: 'forged',
+    },
+  };
+  await assert.rejects(() => h.execute('owner', command), { status: 403 });
+  await h.execute('member', command);
+  const path = [...h.rows.keys()].find((path) => path.includes('/paymentReports/'));
+  const report = h.rows.get(path);
+  assert.equal(report.status, 'pending');
+  assert.equal(report.scope, 'group:home');
+  assert.equal(report.fromUid, 'member');
+  assert.equal(report.toUid, 'owner');
+  assert.notEqual(report.id, 'forged');
+  assert.equal(h.rows.has('sharedGroups/owner_home/settlementMonths/2026-11'), false);
+  await assert.rejects(() => h.execute('member', command), { status: 409 });
+  await assert.rejects(
+    () => h.execute('member', { revision: 2, action: 'confirm-payment', reportId: report.id }),
+    { status: 403 },
+  );
+  await h.execute('owner', { revision: 2, action: 'confirm-payment', reportId: report.id });
+  assert.equal(h.rows.get(path).status, 'confirmed');
+  const ledger = h.rows.get('sharedGroups/owner_home/settlementMonths/2026-11');
+  assert.equal(ledger.records.length, 1);
+  assert.equal(ledger.records[0].amount, 7501);
+  assert.equal(ledger.records[0].receiverUid, 'owner');
+  assert.equal(
+    [...h.rows.keys()].some((path) => path.includes('/paymentReportLocks/')),
+    false,
+  );
+  await assert.rejects(
+    () => h.execute('owner', { revision: 2, action: 'confirm-payment', reportId: report.id }),
+    { status: 409 },
+  );
+  assert.equal(h.rows.get('sharedGroups/owner_home/settlementMonths/2026-11').records.length, 1);
+});
+
+test('refusal leaves debt open and a subsequent partial report can be confirmed', async () => {
+  const h = harness();
+  await h.execute('member', {
+    action: 'upsert',
+    changes: [{ kind: 'expenses', id: 'bill', value: bill }],
+  });
+  const command = {
+    revision: 2,
+    action: 'report-payment',
+    month: '2026-11',
+    date: '2026-11-02',
+    transfer: { from: 'b', to: 'a', amount: 1000 },
+  };
+  await h.execute('member', command);
+  const path = [...h.rows.keys()].find((path) => path.includes('/paymentReports/'));
+  await h.execute('owner', {
+    revision: 2,
+    action: 'reject-payment',
+    reportId: h.rows.get(path).id,
+  });
+  assert.equal(h.rows.get(path).status, 'rejected');
+  assert.equal(h.rows.has('sharedGroups/owner_home/settlementMonths/2026-11'), false);
+  await h.execute('member', command);
+  const next = [...h.rows].find(
+    ([key, value]) => key.includes('/paymentReports/') && value.status === 'pending',
+  )[1];
+  await h.execute('owner', { revision: 2, action: 'confirm-payment', reportId: next.id });
+  assert.equal(h.rows.get('sharedGroups/owner_home/settlementMonths/2026-11').adjustments.b, 1000);
+});
+
+test('a group owner can report a payment to a linked participant without confirming it for them', async () => {
+  const h = harness();
+  await h.execute('member', {
+    action: 'upsert',
+    changes: [{ kind: 'expenses', id: 'bill', value: { ...bill, payer: 'b' } }],
+  });
+  await h.execute('owner', {
+    revision: 2,
+    action: 'report-payment',
+    month: '2026-11',
+    date: '2026-11-02',
+    transfer: { from: 'a', to: 'b', amount: 2500 },
+  });
+  const report = [...h.rows].find(([key]) => key.includes('/paymentReports/'))[1];
+  assert.equal(report.toUid, 'member');
+  await assert.rejects(
+    () => h.execute('owner', { revision: 2, action: 'confirm-payment', reportId: report.id }),
+    { status: 403 },
+  );
+  await h.execute('member', { revision: 2, action: 'confirm-payment', reportId: report.id });
+  assert.equal(
+    h.rows.get('sharedGroups/owner_home/settlementMonths/2026-11').records[0].receiverUid,
+    'member',
+  );
 });

@@ -23,7 +23,15 @@ import { SharedGroupWorkspace } from './SharedGroupWorkspace.jsx';
 
 const sharingEnabled = import.meta.env.VITE_GROUP_SHARING_ENABLED === 'true';
 
-export function SharedGroupView({ membership, referenceMonth, tab, onNavigate }) {
+export function SharedGroupView({
+  membership,
+  referenceMonth,
+  tab,
+  onNavigate,
+  paymentReports,
+  onReport,
+  onRespond,
+}) {
   const { user } = useAuth();
   const [group, setGroup] = useState(null);
   const [ledgers, setLedgers] = useState([]);
@@ -61,7 +69,18 @@ export function SharedGroupView({ membership, referenceMonth, tab, onNavigate })
         </label>
       )}
       <SharedGroupWorkspace
-        {...{ group, membership, month, ledgers, user, tab, onNavigate }}
+        {...{
+          group,
+          membership,
+          month,
+          ledgers,
+          user,
+          tab,
+          onNavigate,
+          paymentReports,
+          onReport,
+          onRespond,
+        }}
         onSaved={(result) =>
           setGroup((current) =>
             !current || current.revision <= result.revision ? { ...current, ...result } : current,
@@ -78,6 +97,7 @@ export function GroupSharingPanel({
   syncBlocked = false,
   financeRevision,
   getFinanceRevision,
+  selectedGroupId,
 }) {
   const { user, localMode } = useAuth();
   const [owned, setOwned] = useState([]);
@@ -102,6 +122,12 @@ export function GroupSharingPanel({
   const selectedInvitee = invitees.includes(personId) ? personId : '';
   const pendingReceived = received.filter((item) => item.status === 'pending');
   const pendingSent = sent.filter((item) => item.status === 'pending');
+  useEffect(() => {
+    if (selectedGroupId) {
+      setGroupId(selectedGroupId);
+      setSection('manage');
+    }
+  }, [selectedGroupId]);
   const fail = () =>
     setError(
       'Não foi possível acessar o compartilhamento. Confira a conexão e a ativação do Firestore e das regras de acesso.',

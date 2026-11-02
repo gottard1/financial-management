@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { validateNewSettlement } from '../../domain/settlements/settlementCalculations.js';
+import { QuickSettlements } from './QuickSettlements.jsx';
 import {
   saveReceipt,
   getReceipt,
@@ -40,13 +41,13 @@ export function SettlementsPanel({
   receiverUid,
   onSharedReceive,
   onSharedUndo,
+  onReport,
+  pendingReports = [],
 }) {
   const group = data.groups.find((item) => `group:${item.id}` === scope);
   const memberIds = group?.memberIds ?? [];
   const names = Object.fromEntries(data.people.map((person) => [person.id, person.name]));
-  const [form, setForm] = useState(() =>
-    initialForm(stats, memberIds, onSharedReceive ? receiverId : null),
-  );
+  const [form, setForm] = useState(() => initialForm(stats, memberIds, receiverId));
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -67,9 +68,7 @@ export function SettlementsPanel({
   }
   useEffect(() => {
     const context = current.current;
-    setForm(
-      initialForm(context.stats, context.memberIds, onSharedReceive ? context.receiverId : null),
-    );
+    setForm(initialForm(context.stats, context.memberIds, context.receiverId));
     setFile(null);
     setError('');
     setVoidId('');
@@ -138,6 +137,10 @@ export function SettlementsPanel({
         status: 'confirmed',
       };
       validateNewSettlement(record, stats, memberIds);
+      if (receiverId && record.to !== receiverId)
+        throw new Error('Você só pode confirmar recebimentos no seu nome.');
+      if (pendingReports.some((item) => item.from === record.from && item.to === record.to))
+        throw new Error('Responda à solicitação de recebimento pendente para este acerto.');
       if (onSharedReceive) {
         if (record.to !== receiverId)
           throw new Error('Você só pode confirmar o dinheiro que recebeu.');
@@ -194,6 +197,11 @@ export function SettlementsPanel({
       }
       setData((previous) => ({
         ...previous,
+        paymentReports: (previous.paymentReports || []).map((item) =>
+          item.id === record.id && item.status === 'confirmed'
+            ? { ...item, status: 'reversed' }
+            : item,
+        ),
         settlements: (previous.settlements ?? []).map((item) =>
           item.id === record.id ? { ...item, status: 'void' } : item,
         ),
@@ -247,35 +255,19 @@ export function SettlementsPanel({
         </p>
         <div className="notice">
           <p>
-            Comprovantes e dados ficam neste navegador; exportação JSON não inclui arquivos. Os
-            anexos não são enviados para a nuvem.
+            Os arquivos de comprovantes ficam neste navegador e não são incluídos no backup JSON. Os
+            registros financeiros seguem a sincronização da sua conta.
           </p>
         </div>
-        <div className="settlement-suggestions">
-          <h3>Acertos pendentes</h3>
-          {suggestions.length ? (
-            suggestions.map((transfer) => (
-              <div className="settlement-record" key={`${transfer.from}:${transfer.to}`}>
-                <p>
-                  <strong>{names[transfer.from]}</strong> deve{' '}
-                  <strong>{money(transfer.amount)}</strong> a <strong>{names[transfer.to]}</strong>.
-                </p>
-                <button
-                  className="button"
-                  type="button"
-                  disabled={busy || (Boolean(onSharedReceive) && transfer.to !== receiverId)}
-                  onClick={() => suggest(transfer)}
-                >
-                  Registrar recebimento
-                </button>
-              </div>
-            ))
-          ) : (
-            <p className="empty">Nenhum acerto pendente nesta competência.</p>
-          )}
-        </div>
+        <QuickSettlements
+          transfers={suggestions}
+          nameOf={(id) => names[id] || 'Participante'}
+          {...{ scope, month, receiverId, onSharedReceive, onSharedUndo, onReport, pendingReports }}
+          commitData={async (update) => setData(update)}
+        />
       </section>
-      <section className="panel" ref={formRef}>
+      <details className="panel manual-receipt" ref={formRef}>
+        <summary>Registrar recebimento com valor, data ou comprovante</summary>
         <h2>Confirmar um recebimento</h2>
         <p>
           Registre somente depois de o dinheiro ter sido recebido. A sugestão preenche o formulário
@@ -310,7 +302,7 @@ export function SettlementsPanel({
               Quem recebeu?
               <select
                 required
-                disabled={Boolean(onSharedReceive)}
+                disabled={Boolean(receiverId)}
                 value={form.to}
                 onChange={(event) =>
                   setForm((previous) => ({ ...previous, to: event.target.value }))
@@ -387,7 +379,7 @@ export function SettlementsPanel({
             </button>
           </div>
         </form>
-      </section>
+      </details>
       {error && (
         <p className="notice error" role="alert">
           {error}

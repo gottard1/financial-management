@@ -875,3 +875,109 @@ test(
     await assertFails(getDoc(doc(guest, 'invitationLookupLimits', 'email-owner')));
   },
 );
+
+test(
+  'payment requests are server-only; confirmation and undo preserve receiver ownership',
+  { skip: !enabled },
+  async () => {
+    const app = initializeAdminApp({ projectId }, 'payment-request-test');
+    try {
+      const db = getAdminFirestore(app),
+        owner = context('payment-owner'),
+        payer = context('payment-payer'),
+        outsider = context('payment-outsider');
+      const id = 'payment-owner_plans';
+      const data = migrateData({
+        ...migrateData(null),
+        people: [
+          { id: 'a', name: 'Maria' },
+          { id: 'b', name: 'João' },
+        ],
+        groups: [{ id: 'plans', name: 'Planos', memberIds: ['a', 'b'], adminPersonId: 'a' }],
+        expenses: [
+          {
+            id: 'bill',
+            workspace: 'group:plans',
+            description: 'Compras',
+            date: '2026-11-01',
+            category: 'Outros',
+            amount: 2400,
+            status: 'paid',
+            payer: 'a',
+            participants: ['a', 'b'],
+            split: 'equal',
+            percentages: {},
+            fixed: false,
+          },
+        ],
+      });
+      await db
+        .collection('sharedGroups')
+        .doc(id)
+        .set({
+          adminUid: 'payment-owner',
+          snapshot: projectSharedGroup(data, 'plans'),
+          revision: 1,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      await db
+        .collection('groupInvites')
+        .doc(id + '_b')
+        .set({
+          groupId: id,
+          personId: 'b',
+          status: 'accepted',
+          acceptedUid: 'payment-payer',
+          adminUid: 'payment-owner',
+        });
+      await db
+        .collection('groupMemberships')
+        .doc('payment-payer_' + id)
+        .set({ uid: 'payment-payer', groupId: id, personId: 'b', inviteId: id + '_b' });
+      const execute = (uid, command) =>
+        editSharedGroup({
+          db,
+          timestamp: () => FieldValue.serverTimestamp(),
+          uid,
+          command: { groupId: id, revision: 1, ...command },
+        });
+      await execute('payment-payer', {
+        action: 'report-payment',
+        month: '2026-11',
+        date: '2026-11-02',
+        transfer: { from: 'b', to: 'a', amount: 1200 },
+      });
+      const report = (
+        await db.collection('sharedGroups').doc(id).collection('paymentReports').get()
+      ).docs[0];
+      const ref = (client) => doc(client, 'sharedGroups', id, 'paymentReports', report.id);
+      await assertSucceeds(getDoc(ref(payer)));
+      await assertFails(getDoc(ref(outsider)));
+      await assertFails(updateDoc(ref(payer), { status: 'confirmed' }));
+      await assertFails(updateDoc(ref(owner), { status: 'confirmed' }));
+      await assertFails(
+        writeSharedSettlement(owner, 'payment-owner', id, {
+          month: '2026-11',
+          id: 'bypass',
+          date: '2026-11-02',
+          transfer: { from: 'b', to: 'a', amount: 1200 },
+        }),
+      );
+      await execute('payment-owner', { action: 'confirm-payment', reportId: report.id });
+      await assertFails(
+        updateDoc(ref(owner), { status: 'reversed', updatedAt: serverTimestamp() }),
+      );
+      await assertSucceeds(
+        writeSharedSettlement(owner, 'payment-owner', id, { month: '2026-11', voidId: report.id }),
+      );
+      assert.equal((await getDoc(ref(owner))).data().status, 'reversed');
+      assert.equal(
+        (await getDoc(doc(owner, 'sharedGroups', id, 'settlementMonths', '2026-11'))).data()
+          .adjustments.a,
+        0,
+      );
+    } finally {
+      await deleteAdminApp(app);
+    }
+  },
+);

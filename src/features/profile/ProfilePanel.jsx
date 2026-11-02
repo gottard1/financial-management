@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { IncomePanel } from '../income/IncomePanel.jsx';
 import { profilePerson, saveProfile } from '../../domain/groups/profile.js';
+import { Avatar } from '../../components/ui/Avatar.jsx';
 
 export function ProfilePanel({ data, setData, month, user, notify, onMonthChange }) {
   const person = profilePerson(data, user?.uid);
@@ -40,6 +41,13 @@ function PersonalDetails({ person, user, setData, notify }) {
     <section className="panel personal-details-panel">
       <p className="eyebrow">SEU PERFIL</p>
       <h2>Dados pessoais</h2>
+      <div className="profile-avatar">
+        <Avatar name={person.name} photoURL={user?.photoURL} large />
+        <div>
+          <strong>{person.name}</strong>
+          {user?.photoURL && <small>Foto da sua conta Google</small>}
+        </div>
+      </div>
       <p className="muted section-intro">
         Atualize seu nome e suas informações. Telefone, cidade, ocupação, renda e benefícios ficam
         privados na sua conta. Seu nome identifica você nos grupos que administra.

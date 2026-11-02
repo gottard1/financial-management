@@ -11,6 +11,8 @@ export function QuickSettlements({
   receiverId,
   onSharedReceive,
   onSharedUndo,
+  onReport,
+  pendingReports = [],
   readOnly = false,
 }) {
   const [busy, setBusy] = useState(false);
@@ -58,63 +60,85 @@ export function QuickSettlements({
                 <span>repassa para {nameOf(transfer.to)}</span>
               </div>
               <strong className="amount">{money(transfer.amount)}</strong>
-              {!readOnly && transfer.to === receiverId && (
-                <div className="quick-receipt-actions">
+              {pendingReports.some(
+                (item) => item.from === transfer.from && item.to === transfer.to,
+              ) && <span className="pill pending">Aguardando confirmação nas solicitações</span>}
+              {!readOnly &&
+                onReport &&
+                transfer.from === receiverId &&
+                !pendingReports.some(
+                  (item) => item.from === transfer.from && item.to === transfer.to,
+                ) && (
                   <button
                     type="button"
                     className="button primary"
                     disabled={busy}
-                    onClick={() => receive(transfer)}
-                    aria-label={`Confirmar recebimento de ${money(transfer.amount)} de ${nameOf(transfer.from)} para ${nameOf(transfer.to)}`}
+                    onClick={() => run(() => onReport(transfer))}
                   >
-                    {busy ? 'Salvando…' : '✓ Já recebi'}
+                    {busy ? 'Salvando…' : 'Informar pagamento'}
                   </button>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => {
-                      setPartial(`${transfer.from}:${transfer.to}`);
-                      setAmount('');
-                    }}
-                  >
-                    Recebi uma parte
-                  </button>
-                  {partial === `${transfer.from}:${transfer.to}` && (
-                    <form
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        try {
-                          receive({ ...transfer, amount: parseMoney(amount) });
-                        } catch (err) {
-                          setError(err.message);
-                        }
+                )}
+              {!readOnly &&
+                transfer.to === receiverId &&
+                !pendingReports.some(
+                  (item) => item.from === transfer.from && item.to === transfer.to,
+                ) && (
+                  <div className="quick-receipt-actions">
+                    <button
+                      type="button"
+                      className="button primary"
+                      disabled={busy}
+                      onClick={() => receive(transfer)}
+                      aria-label={`Confirmar recebimento de ${money(transfer.amount)} de ${nameOf(transfer.from)} para ${nameOf(transfer.to)}`}
+                    >
+                      {busy ? 'Salvando…' : '✓ Já recebi'}
+                    </button>
+                    <button
+                      type="button"
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        setPartial(`${transfer.from}:${transfer.to}`);
+                        setAmount('');
                       }}
                     >
-                      <label className="field">
-                        Valor recebido (R$)
-                        <input
-                          required
-                          inputMode="decimal"
-                          value={amount}
-                          onChange={(event) => setAmount(event.target.value)}
-                          placeholder="0,00"
-                        />
-                      </label>
-                      <button className="button primary" disabled={busy}>
-                        Confirmar valor recebido
-                      </button>
-                      <button
-                        type="button"
-                        className="button secondary"
-                        onClick={() => setPartial('')}
+                      Recebi uma parte
+                    </button>
+                    {partial === `${transfer.from}:${transfer.to}` && (
+                      <form
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          try {
+                            receive({ ...transfer, amount: parseMoney(amount) });
+                          } catch (err) {
+                            setError(err.message);
+                          }
+                        }}
                       >
-                        Cancelar
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
+                        <label className="field">
+                          Valor recebido (R$)
+                          <input
+                            required
+                            inputMode="decimal"
+                            value={amount}
+                            onChange={(event) => setAmount(event.target.value)}
+                            placeholder="0,00"
+                          />
+                        </label>
+                        <button className="button primary" disabled={busy}>
+                          Confirmar valor recebido
+                        </button>
+                        <button
+                          type="button"
+                          className="button secondary"
+                          onClick={() => setPartial('')}
+                        >
+                          Cancelar
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                )}
             </li>
           ))}
         </ul>
