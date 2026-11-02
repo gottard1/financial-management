@@ -38,6 +38,7 @@ import { SettlementsPanel } from '../features/settlements/SettlementsPanel.jsx';
 import { MonthlyComparisonPanel } from '../features/comparison/MonthlyComparisonPanel.jsx';
 import { FinanceSyncStatus } from '../features/sync/FinanceSyncStatus.jsx';
 import { activeGroupMembers } from '../domain/groups/groupMembers.js';
+import { activePeople } from '../domain/groups/managedPeople.js';
 import { AuthScreen } from '../features/auth/AuthScreen.jsx';
 import { useAuth } from '../features/auth/AuthProvider.jsx';
 const monthNow = () => new Date().toLocaleDateString('sv-SE').slice(0, 7);
@@ -121,7 +122,10 @@ function FinanceApp({ storageNamespace }) {
     data.groups.find((item) => item.id === groupId) || data.groups.find((item) => !item.deleted);
   const ownedSharedGroup = ownedSharedGroups.find((item) => item.localId === group?.id);
   const archivedGroup = mode === 'group' && group?.deleted;
-  const person = data.people.some((item) => item.id === personId) ? personId : data.people[0].id;
+  const selectablePeople = activePeople(data);
+  const person = selectablePeople.some((item) => item.id === personId)
+    ? personId
+    : selectablePeople[0].id;
   const selectedGroupId = sharedGroup?.id || group?.id || sharedGroups[0]?.id || '';
   const selectedSharedGroup =
     mode === 'group' && sharedGroups.find((item) => item.id === selectedGroupId);
@@ -564,11 +568,11 @@ function FinanceApp({ storageNamespace }) {
           </div>
         )}
         <div className="app-page-content" inert={blocked ? true : undefined}>
-          {financialPage && mode === 'individual' && localMode && data.people.length > 1 && (
+          {financialPage && mode === 'individual' && localMode && selectablePeople.length > 1 && (
             <label className="field local-person-picker">
               Pessoa no modo local
               <select value={person} onChange={(event) => setPerson(event.target.value)}>
-                {data.people.map((item) => (
+                {selectablePeople.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>

@@ -14,6 +14,8 @@ export function prepareEmailInvitation(
     : data.people.find(
         (item) => item.inviteEmail === normalized && group.memberIds.includes(item.id),
       );
+  if (existing?.removed)
+    throw new Error('Reative o cadastro em Pessoas cadastradas antes de enviar um novo convite.');
   if (personId && (!existing || !activeGroupMembers(group).includes(personId)))
     throw new Error('Selecione um participante ativo deste grupo.');
   if (existing?.id === group.adminPersonId)

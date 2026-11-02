@@ -89,6 +89,7 @@ O redesign mantém Firebase nesta etapa. Não há migração para Supabase nem u
 
 ### Espaços de grupo
 
+- Em **Criar ou gerenciar grupos → Pessoas cadastradas**, o administrador pode remover cadastros sob sua gestão. A remoção revoga convites e acessos aos grupos e preserva nomes, rendas, despesas e saldos no histórico. O próprio perfil do administrador é protegido; grupos devem manter pelo menos um participante. **Pessoas removidas** permite reativar um cadastro, sem restaurar acesso nem convites automaticamente. A conta pessoal da pessoa convidada não é excluída.
 - Exclusão de grupos com histórico preservado para consulta, ou exclusão definitiva do histórico por confirmação digitada. A limpeza definitiva remove os registros financeiros daquele grupo e os convites, preserva pessoas e rendas e mantém apenas um pequeno marcador remoto de bloqueio.
 - Participantes ativos usam os mesmos painéis para cadastrar e editar despesas, trazer recorrentes, ajustar orçamento e criar metas e aportes. Podem confirmar e estornar os próprios recebimentos e convidar novos membros somente na aba **Pessoas e grupos**. Os dados cadastrais do grupo são editados apenas pelo administrador. Participantes não podem alterar vínculos existentes, excluir registros, remover membros, apagar grupos ou limpar históricos. A edição compartilhada exige a API autenticada do servidor; os dados privados das contas permanecem isolados.
 

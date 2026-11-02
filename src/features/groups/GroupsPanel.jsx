@@ -9,6 +9,13 @@ import {
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { PurgeGroupDialog } from './PurgeGroupDialog.jsx';
 import { removeReceipt } from '../../infrastructure/storage/receiptRepository.js';
+import {
+  activePeople,
+  personRemovalGroups,
+  removeManagedPersonWithAccess,
+  restoreManagedPerson,
+} from '../../domain/groups/managedPeople.js';
+import { profilePerson } from '../../domain/groups/profile.js';
 export function GroupsPanel({
   data,
   setData,
@@ -32,8 +39,15 @@ export function GroupsPanel({
   const [memberIds, setMemberIds] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [personError, setPersonError] = useState('');
+  const [personRemovalError, setPersonRemovalError] = useState('');
   const [groupError, setGroupError] = useState('');
   const people = data.people || [];
+  const registeredPeople = activePeople(data);
+  const removedPeople = people.filter((person) => person.removed);
+  const ownPerson = profilePerson(data, user?.uid);
+  const isProtectedPerson = (person) =>
+    person.id === ownPerson?.id ||
+    data.groups.some((group) => !group.deleted && group.adminPersonId === person.id);
   const accountPerson = people.find((person) => person.accountUid === user?.uid && user?.uid);
   const groups = (data.groups || []).filter((group) => !group.deleted);
   const archivedGroups = (data.groups || []).filter((group) => group.deleted);
@@ -50,6 +64,7 @@ export function GroupsPanel({
   const normalize = (name) => name.trim().toLocaleLowerCase('pt-BR');
   function createPerson(event) {
     event.preventDefault();
+    if (removing) return;
     const name = personName.trim();
     if (!name || name.length > 60) {
       setPersonError('Informe um nome de até 60 caracteres.');
@@ -85,6 +100,7 @@ export function GroupsPanel({
   }
   function saveGroup(event) {
     event.preventDefault();
+    if (removing) return;
     if (editingId && !editing) {
       setGroupError('Este grupo foi excluído e não pode ser alterado.');
       return;
@@ -107,8 +123,8 @@ export function GroupsPanel({
       );
       return;
     }
-    if (members.some((id) => !people.some((person) => person.id === id))) {
-      setGroupError('Selecione apenas pessoas cadastradas.');
+    if (members.some((id) => !registeredPeople.some((person) => person.id === id))) {
+      setGroupError('Selecione apenas pessoas com cadastro ativo.');
       return;
     }
     const id = editingId || crypto.randomUUID();
@@ -161,6 +177,57 @@ export function GroupsPanel({
       current.includes(id) ? current.filter((value) => value !== id) : [...current, id],
     );
     setGroupError('');
+  }
+  async function removePerson(person) {
+    if (removing) return;
+    setPersonRemovalError('');
+    try {
+      personRemovalGroups(data, person.id, user?.uid);
+      if (
+        !window.confirm(
+          `Remover o cadastro de ${person.name}? A pessoa sairá dos grupos que você administra e seus convites e acessos serão revogados. Despesas, rendas e saldos anteriores serão preservados no histórico. A conta pessoal dela não será excluída.`,
+        )
+      )
+        return;
+      setRemoving(`person:${person.id}`);
+      const repository =
+        user && !localMode
+          ? await import('../../infrastructure/firebase/groupSharingRepository.js')
+          : null;
+      await removeManagedPersonWithAccess({
+        data,
+        personId: person.id,
+        uid: user?.uid,
+        revokeAccess: repository?.removeMemberAccess,
+        commitData,
+      });
+      setMemberIds((current) => current.filter((id) => id !== person.id));
+      if (editingPersonId === person.id) {
+        setEditingPersonId('');
+        setPersonName('');
+      }
+      notify?.(`${person.name} foi removido dos cadastros e grupos. O histórico foi preservado.`);
+    } catch (error) {
+      setPersonRemovalError(
+        (error.code
+          ? 'Não foi possível concluir a remoção. Confira a conexão e as regras do Firestore.'
+          : error.message) + ' Remoções já concluídas foram mantidas; você pode tentar novamente.',
+      );
+    } finally {
+      setRemoving('');
+    }
+  }
+  function restorePerson(person) {
+    if (removing) return;
+    try {
+      setData((current) => restoreManagedPerson(current, person.id));
+      setPersonRemovalError('');
+      notify?.(
+        'Cadastro reativado. Adicione a pessoa aos grupos e envie novos convites se desejar.',
+      );
+    } catch (error) {
+      setPersonRemovalError(error.message);
+    }
   }
   async function removeMember(group, personId) {
     const name = people.find((person) => person.id === personId)?.name || 'esta pessoa';
@@ -294,7 +361,7 @@ export function GroupsPanel({
               </p>
             )}
             <div className="form-actions">
-              <button className="button primary">
+              <button className="button primary" disabled={Boolean(removing)}>
                 {editingPersonId ? 'Salvar nome' : 'Adicionar pessoa'}
               </button>
               {editingPersonId && (
@@ -335,9 +402,9 @@ export function GroupsPanel({
                   ? 'Participantes ativos · adicione ou reative pessoas'
                   : 'Participantes · selecione seu nome para começar'}
               </legend>
-              {people.length ? (
+              {registeredPeople.length ? (
                 <div className="group-member-options">
-                  {people.map((person) => (
+                  {registeredPeople.map((person) => (
                     <label
                       className={
                         'group-member-option ' + (memberIds.includes(person.id) ? 'selected' : '')
@@ -376,7 +443,7 @@ export function GroupsPanel({
                 onChange={(event) => setAdminPersonId(event.target.value)}
               >
                 <option value="">Selecione seu nome</option>
-                {people
+                {registeredPeople
                   .filter((person) => memberIds.includes(person.id))
                   .map((person) => (
                     <option key={person.id} value={person.id}>
@@ -412,7 +479,7 @@ export function GroupsPanel({
               )}
               <button
                 className="button primary"
-                disabled={Boolean(removing) || (!editingId && people.length < 1)}
+                disabled={Boolean(removing) || (!editingId && registeredPeople.length < 1)}
               >
                 {editingId ? 'Salvar grupo' : 'Criar grupo'}
               </button>
@@ -425,13 +492,18 @@ export function GroupsPanel({
           <div>
             <p className="eyebrow">TODAS AS PESSOAS</p>
             <h2>
-              Pessoas cadastradas <span className="pill">{people.length}</span>
+              Pessoas cadastradas <span className="pill">{registeredPeople.length}</span>
             </h2>
           </div>
         </div>
-        {people.length ? (
+        {personRemovalError && (
+          <p className="notice error" role="alert">
+            {personRemovalError}
+          </p>
+        )}
+        {registeredPeople.length ? (
           <ul className="people-chips">
-            {people.map((person) => (
+            {registeredPeople.map((person) => (
               <li key={person.id}>
                 <span className="avatar" aria-hidden="true">
                   {person.name.slice(0, 1).toLocaleUpperCase('pt-BR')}
@@ -440,6 +512,7 @@ export function GroupsPanel({
                 <button
                   type="button"
                   className="text-button"
+                  disabled={Boolean(removing)}
                   onClick={() => {
                     setEditingPersonId(person.id);
                     setPersonName(person.name === 'Você' ? '' : person.name);
@@ -449,6 +522,19 @@ export function GroupsPanel({
                 >
                   Editar nome
                 </button>
+                {isProtectedPerson(person) ? (
+                  <small>Administrador · cadastro protegido</small>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-button person-remove-button"
+                    disabled={Boolean(removing)}
+                    aria-label={`Remover cadastro de ${person.name}`}
+                    onClick={() => removePerson(person)}
+                  >
+                    {removing === `person:${person.id}` ? 'Removendo…' : 'Remover cadastro'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -460,6 +546,31 @@ export function GroupsPanel({
           cadastros. Para vincular uma conta, selecione o participante em Convites e acesso ao grupo
           e informe seu e-mail.
         </p>
+        {removedPeople.length > 0 && (
+          <details className="removed-people">
+            <summary>Pessoas removidas ({removedPeople.length})</summary>
+            <p className="hint">
+              Os nomes continuam no histórico financeiro. Reativar o cadastro não devolve o acesso
+              aos grupos nem reenvia convites.
+            </p>
+            <ul className="people-chips">
+              {removedPeople.map((person) => (
+                <li key={person.id}>
+                  <strong>{person.name}</strong>
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={Boolean(removing)}
+                    aria-label={`Reativar cadastro de ${person.name}`}
+                    onClick={() => restorePerson(person)}
+                  >
+                    Reativar cadastro
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </section>
       <section className="panel">
         <p className="eyebrow">UM ESPAÇO PARA CADA PLANO</p>

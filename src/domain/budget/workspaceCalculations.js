@@ -256,8 +256,12 @@ export function migrateData(input) {
     record(person, 'Pessoa');
     uniqueId(person.id, personIds, 'pessoa');
     text(person.name, 'Nome da pessoa');
+    if (person.removed !== undefined && typeof person.removed !== 'boolean')
+      throw new Error('Situação da pessoa inválida.');
     return { ...person };
   });
+  if (people.every((person) => person.removed))
+    throw new Error('Mantenha pelo menos uma pessoa cadastrada.');
   const groupIds = new Set();
   const groups = raw.groups.map((group) => {
     record(group, 'Grupo');
@@ -282,6 +286,16 @@ export function migrateData(input) {
         group.removedMemberIds.length >= group.memberIds.length)
     )
       throw new Error('Participantes removidos do grupo inválidos.');
+    if (
+      !group.deleted &&
+      people.some(
+        (person) =>
+          person.removed &&
+          group.memberIds.includes(person.id) &&
+          !(group.removedMemberIds || []).includes(person.id),
+      )
+    )
+      throw new Error('Pessoas removidas não podem ter participação ativa em grupos.');
     return {
       ...group,
       memberIds: [...group.memberIds],

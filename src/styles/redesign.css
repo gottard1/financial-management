@@ -894,3 +894,25 @@
     flex-wrap: wrap;
   }
 }
+/* Keep person actions separated and reachable on narrow screens. */
+.app-shell .people-chips li {
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.app-shell .people-chips .person-remove-button {
+  color: #a33030;
+}
+
+.removed-people {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.removed-people summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
