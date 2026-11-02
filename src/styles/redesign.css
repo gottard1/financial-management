@@ -916,3 +916,34 @@
   cursor: pointer;
   padding: 8px 0;
 }
+
+.category-form {
+  max-width: 560px;
+  margin: 24px 0 32px;
+}
+
+.category-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 20px 0 0;
+}
+
+.category-catalog li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8faf5;
+  overflow-wrap: anywhere;
+}
+
+.category-catalog small {
+  color: var(--muted);
+}

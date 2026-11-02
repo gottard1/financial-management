@@ -2,17 +2,24 @@ import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { Progress } from '../../components/ui/Progress.jsx';
 export { Progress } from '../../components/ui/Progress.jsx';
-import { CATEGORIES } from '../../shared/constants/categories.js';
+import { categoryOptions } from '../../domain/expenses/expenseCategories.js';
 const value = (c) => (c / 100).toFixed(2).replace('.', ',');
+const categoryField = (name) => `category:${encodeURIComponent(name)}`;
+const categoryAmount = (values, name) => (values && Object.hasOwn(values, name) ? values[name] : 0);
 export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
   const plan = data.plans[scope + '|' + month] || {};
+  const availableCategories = categoryOptions(data, scope, Object.keys(stats.categories || {}));
   const [error, setError] = useState('');
   async function save(e) {
     e.preventDefault();
     try {
-      const f = new FormData(e.currentTarget),
-        categories = {};
-      CATEGORIES.forEach((c) => (categories[c] = parseMoney(String(f.get(c) || '0'))));
+      const f = new FormData(e.currentTarget);
+      const categories = Object.fromEntries(
+        availableCategories.map((name) => [
+          name,
+          parseMoney(String(f.get(categoryField(name)) || '0')),
+        ]),
+      );
       const spendingLimit = parseMoney(f.get('spendingLimit')),
         savingTarget = parseMoney(f.get('savingTarget'));
       await setData((d) => ({
@@ -89,19 +96,19 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
           despesas.
         </p>
         <div className="form-grid">
-          {CATEGORIES.map((c) => (
+          {availableCategories.map((c) => (
             <label className="field" key={c}>
               {c}
               <input
-                name={c}
+                name={categoryField(c)}
                 required
                 inputMode="decimal"
-                defaultValue={value(plan.categories?.[c] || 0)}
+                defaultValue={value(categoryAmount(plan.categories, c))}
               />
               <small>
-                Comprometido: {money(stats.categories[c] || 0)}
-                {plan.categories?.[c] > 0
-                  ? ` · ${stats.categories[c] > plan.categories[c] ? 'Acima do limite' : 'Dentro do limite'}`
+                Comprometido: {money(categoryAmount(stats.categories, c))}
+                {categoryAmount(plan.categories, c) > 0
+                  ? ` · ${categoryAmount(stats.categories, c) > categoryAmount(plan.categories, c) ? 'Acima do limite' : 'Dentro do limite'}`
                   : ''}
               </small>
             </label>

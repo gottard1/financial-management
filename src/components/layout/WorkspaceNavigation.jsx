@@ -8,6 +8,7 @@ export function WorkspaceNavigation({ mode, tab, onNavigate, administrator }) {
           ['expenses', 'Despesas'],
           ['comparison', 'Análises'],
           ['budget', 'Orçamento'],
+          ['categories', 'Categorias'],
           ['savings', 'Metas'],
           ['members', 'Participantes'],
           ...(administrator ? [['settings', 'Configurações']] : []),
@@ -18,6 +19,7 @@ export function WorkspaceNavigation({ mode, tab, onNavigate, administrator }) {
           ['expenses', 'Despesas'],
           ['comparison', 'Análises'],
           ['budget', 'Orçamento'],
+          ['categories', 'Categorias'],
           ['savings', 'Metas e reservas'],
         ];
   return (

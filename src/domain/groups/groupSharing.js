@@ -22,6 +22,7 @@ export function projectSharedGroup(data, groupId) {
   return {
     id: group.id,
     name: group.name,
+    categories: [...(group.categories || [])],
     adminPersonId: group.adminPersonId || null,
     activeMemberIds: activeGroupMembers(group),
     emptyOverview: {

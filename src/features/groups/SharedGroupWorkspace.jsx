@@ -4,6 +4,7 @@ import { ExpenseList } from '../expenses/ExpenseList.jsx';
 import { ExpenseDialog } from '../expenses/ExpenseDialog.jsx';
 import { RecurringExpensesDialog } from '../expenses/RecurringExpensesDialog.jsx';
 import { BudgetPanel } from '../budget/BudgetPanel.jsx';
+import { CategoriesPanel } from '../categories/CategoriesPanel.jsx';
 import { SavingsPanel } from '../savings/SavingsPanel.jsx';
 import { SettlementsPanel } from '../settlements/SettlementsPanel.jsx';
 import { MonthlyComparisonPanel } from '../comparison/MonthlyComparisonPanel.jsx';
@@ -252,6 +253,7 @@ export function SharedGroupWorkspace({
             ['overview', 'Visão do grupo'],
             ['expenses', 'Despesas'],
             ['budget', 'Orçamento'],
+            ['categories', 'Categorias'],
             ['savings', 'Metas e reservas'],
             ['settlements', 'Repasses e comprovantes'],
             ['comparison', 'Comparar meses'],
@@ -289,7 +291,11 @@ export function SharedGroupWorkspace({
             }}
           />
         )}
+        {selectedTab === 'categories' && (
+          <CategoriesPanel data={data} scope={scope} canManage={false} />
+        )}
         {selectedTab !== 'groups' &&
+          selectedTab !== 'categories' &&
           (overview ? (
             <>
               {selectedTab === 'overview' && <MonthlyOverview {...overview} {...common} go={go} />}

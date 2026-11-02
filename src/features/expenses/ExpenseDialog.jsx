@@ -1,6 +1,6 @@
 import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
-import { CATEGORIES } from '../../shared/constants/categories.js';
+import { categoryOptions } from '../../domain/expenses/expenseCategories.js';
 
 function equalPercentages(ids) {
   const base = ids.length ? Math.floor(10000 / ids.length) : 0;
@@ -109,7 +109,7 @@ export function ExpenseDialog({
             <label className="field">
               Categoria
               <select value={draft.category} onChange={(e) => update('category', e.target.value)}>
-                {CATEGORIES.map((category) => (
+                {categoryOptions(data, draft.workspace, [draft.category]).map((category) => (
                   <option key={category}>{category}</option>
                 ))}
               </select>

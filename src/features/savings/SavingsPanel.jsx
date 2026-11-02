@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { Progress } from '../../components/ui/Progress.jsx';
-import { CATEGORIES } from '../../shared/constants/categories.js';
 const value = (c) => (c / 100).toFixed(2).replace('.', ',');
 export function SavingsPanel({ data, setData, scope, month, stats, notify, canDelete = true }) {
   const [error, setError] = useState('');

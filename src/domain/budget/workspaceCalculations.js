@@ -1,6 +1,7 @@
 import { splitExpense, summarize } from '../expenses/expenseCalculations.js';
 import { validateInstallments } from '../expenses/recurringExpenses.js';
 import { validatePaymentReport } from '../settlements/paymentReports.js';
+import { validateCategoryNames } from '../expenses/expenseCategories.js';
 import {
   applySettlements,
   validateSettlementRecord,
@@ -256,6 +257,7 @@ export function migrateData(input) {
     record(person, 'Pessoa');
     uniqueId(person.id, personIds, 'pessoa');
     text(person.name, 'Nome da pessoa');
+    if (person.categories !== undefined) validateCategoryNames(person.categories);
     if (person.removed !== undefined && typeof person.removed !== 'boolean')
       throw new Error('Situação da pessoa inválida.');
     return { ...person };
@@ -267,6 +269,7 @@ export function migrateData(input) {
     record(group, 'Grupo');
     uniqueId(group.id, groupIds, 'grupo');
     text(group.name, 'Nome do grupo');
+    if (group.categories !== undefined) validateCategoryNames(group.categories);
     if (group.deleted !== undefined && typeof group.deleted !== 'boolean')
       throw new Error('Situação do grupo inválida.');
     if (

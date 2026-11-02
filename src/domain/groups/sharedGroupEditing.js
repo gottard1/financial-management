@@ -37,6 +37,7 @@ export function sharedGroupData(snapshot) {
       {
         id: snapshot.id,
         name: snapshot.name,
+        categories: snapshot.categories || [],
         adminPersonId: snapshot.adminPersonId,
         memberIds: snapshot.people.map((person) => person.id),
         removedMemberIds: snapshot.people

@@ -31,6 +31,7 @@ import { calculateWorkspace } from '../domain/budget/workspaceCalculations.js';
 import { sumRestrictedBenefits } from '../domain/income/calculateCompensation.js';
 import { ProfilePanel } from '../features/profile/ProfilePanel.jsx';
 import { BudgetPanel } from '../features/budget/BudgetPanel.jsx';
+import { CategoriesPanel } from '../features/categories/CategoriesPanel.jsx';
 import { SavingsPanel } from '../features/savings/SavingsPanel.jsx';
 import { GroupsPanel } from '../features/groups/GroupsPanel.jsx';
 import { ArchivedGroupHistory } from '../features/groups/ArchivedGroupHistory.jsx';
@@ -326,6 +327,7 @@ function FinanceApp({ storageNamespace }) {
     overview: 'Clareza para o seu mês.',
     expenses: 'Despesas',
     budget: 'Orçamento',
+    categories: 'Categorias',
     savings: 'Metas e reservas',
     people: 'Perfil e renda',
     groups: 'Pessoas e grupos',
@@ -341,6 +343,7 @@ function FinanceApp({ storageNamespace }) {
     {
       overview: 'Suas contas em ordem. Seus planos em movimento.',
       expenses: 'Cada conta no seu lugar, com pagamentos separados.',
+      categories: 'Organize os tipos de gasto para acompanhar melhor seu dinheiro.',
       people: 'Seus dados pessoais, renda e benefícios ficam privados.',
       notifications: 'O que precisa da sua atenção em todos os seus grupos.',
       groups: 'Crie grupos com uma ou mais pessoas e gerencie seus acessos.',
@@ -495,7 +498,9 @@ function FinanceApp({ storageNamespace }) {
               : 'Minha conta / ' + pageTitle}
           </span>
           <div className="app-top-actions">
-            {financialPage && <ReferenceMonth month={month} onChange={setMonth} />}
+            {financialPage && tab !== 'categories' && (
+              <ReferenceMonth month={month} onChange={setMonth} />
+            )}
             <button
               type="button"
               className="notification-trigger"
@@ -748,6 +753,9 @@ function FinanceApp({ storageNamespace }) {
                   key={scope + '|' + month}
                   {...{ data, scope, month, mode }}
                 />
+              )}
+              {tab === 'categories' && (
+                <CategoriesPanel key={scope} {...{ data, setData, scope }} notify={setNotice} />
               )}
               {tab === 'budget' && stats && (
                 <BudgetPanel

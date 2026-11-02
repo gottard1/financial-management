@@ -65,6 +65,16 @@ function render(data, draft, preview) {
   );
 }
 
+test('category choices include group custom names and retain the category of an older expense', () => {
+  const { data, draft } = sharedExpense();
+  data.groups[0].categories = ['Animais'];
+  data.people[0].categories = ['Privada'];
+  const html = render(data, { ...draft, category: 'Categoria antiga' }, { a: 100000, b: 100000 });
+  assert.match(html, /<option[^>]*>Animais<\/option>/);
+  assert.match(html, /<option[^>]*selected=""[^>]*>Categoria antiga<\/option>/);
+  assert.ok(!html.includes('>Privada</option>'));
+});
+
 test('a participant can render an existing paid shared expense with group and payer controls', () => {
   const { data, draft, snapshot } = sharedExpense();
   assert.equal(snapshot.expenses[0].workspace, undefined);
