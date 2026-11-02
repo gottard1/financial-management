@@ -157,6 +157,12 @@ Veja as [fontes oficiais e premissas](docs/income-calculations-2026.md).
 
 ## Regras dos cálculos
 
+### Regras opcionais do Excel e investimentos
+
+As áreas **Receitas**, **Faturas e eventos**, **Investimentos** e **Visão anual** acrescentam recebimentos detalhados, classificações essenciais/eventos/companhia, cartões com fechamento, parcelas por valor total, recorrência finita, reservas com retiradas e transferências, posições e avaliações manuais. **Categorias** também cadastra categorias de receitas e tipos de investimento. **Orçamento** oferece estratégia mensal opcional com meta percentual ou em reais e distribuição configurável do saldo, sem registrar aportes automaticamente.
+
+Os modos anteriores continuam disponíveis: vencimento para despesas sem cartão, valor de uma parcela, revisão de recorrentes, perfil mensal de renda, meta em reais e progresso pela soma histórica de aportes. Nenhum dado da planilha é importado. As configurações novas só passam a valer quando escolhidas. Consulte [funcionamento, compatibilidade, conciliação e limites](docs/excel-finance-and-investments.md).
+
 Todos os valores monetários de domínio são **centavos inteiros**. Operações de rateio usam razões inteiras com `BigInt`, evitando deriva de ponto flutuante.
 
 - O valor é distribuído pelo método dos maiores restos: cada parte recebe os centavos inteiros e os restantes vão para as maiores frações. Empates seguem a ordem dos participantes da despesa.
@@ -244,7 +250,7 @@ Também confira no navegador: fluxos individuais e de grupo, cadastro e edição
 ## Próximas etapas
 
 - Sincronização de arquivos de comprovantes e restauração de backups pela interface.
-- Importação de backups e retiradas das reservas.
+- Importação de backups pela interface e transferências entre espaços.
 - Pagamentos parciais, múltiplos pagadores e transferências entre espaços.
 - Fechamento de mês com snapshots para preservar divisões antigas.
 - Relatórios exportáveis a partir do histórico mensal.
@@ -253,13 +259,13 @@ Também confira no navegador: fluxos individuais e de grupo, cadastro e edição
 
 ## Modelo de dados
 
-O formato v3 contém `people`, `groups`, `months`, `incomeConfigs`, `expenses`, `plans`, `goals`, `contributions` e `settlements`. Rendas e configurações mensais são mapas por ID da pessoa. Grupos contêm seus `memberIds`. Despesas guardam o `payer`, seus `participants` e os `percentages` quando personalizados. Veja os [campos dos models e as opções de evolução](docs/architecture.md#models-e-extensões).
+O formato v3 contém `people`, `groups`, `months`, `incomeConfigs`, `expenses`, `plans`, `goals`, `contributions`, `settlements` e `paymentReports`. As coleções opcionais `cards`, `events`, `incomeEntries`, `reserveMovements`, `investments`, `investmentMovements` e `investmentValuations` recebem listas vazias nos dados antigos. Rendas e configurações mensais são mapas por ID da pessoa. Grupos contêm seus `memberIds`. Despesas guardam o `payer`, seus `participants` e os `percentages` quando personalizados. Veja os [campos dos models e as opções de evolução](docs/architecture.md#models-e-extensões).
 
 Escopos usam `person:<id>` e `group:<id>`. Uma conta em grupo nunca é duplicada para gerar os resumos pessoais; as cotas são derivadas pelo mesmo motor de rateio. Os cadastros de pessoas e grupos são preservados. É possível renomear grupos, adicionar, remover e reativar integrantes. A remoção conserva os IDs históricos em `memberIds`, registra os inativos em `removedMemberIds` e revoga convites e acesso da conta vinculada, sem apagar despesas ou repasses. O grupo mantém pelo menos um integrante ativo.
 
 ## Limitações atuais
 
-Uma despesa tem um pagador para seu valor total. Repasses confirmados abatem o saldo; o dinheiro não é movimentado pelo aplicativo. A inclusão de contas recorrentes é explícita e permite revisar o valor de cada mês antes de salvar. Metas não calculam rendimentos ou retiradas. O aplicativo não acessa bancos nem realiza transações. As estimativas tributárias servem para orçamento e não substituem conferência da folha ou apuração fiscal.
+Uma despesa tem um pagador para seu valor total. Repasses confirmados abatem o saldo; o dinheiro não é movimentado pelo aplicativo. A inclusão de contas recorrentes é explícita e permite revisar o valor de cada mês antes de salvar. O progresso histórico por aportes continua disponível; a opção de saldo líquido considera retiradas, transferências e investimentos vinculados. Avaliações e resultados de investimentos são manuais, sem apuração automática de custo médio ou tributos. O aplicativo não acessa bancos nem realiza transações. As estimativas tributárias servem para orçamento e não substituem conferência da folha ou apuração fiscal.
 
 O projeto permanece privado, sem licença de distribuição definida. Uma licença pode ser adicionada quando a forma de disponibilização for decidida.
 

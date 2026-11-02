@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { recurrenceLabel } from '../../domain/expenses/recurringExpenses.js';
 import { money, splitExpense } from '../../domain/expenses/expenseCalculations.js';
 
@@ -76,21 +76,31 @@ export function ExpenseList({
   canDelete = true,
 }) {
   const shared = mode === 'group';
-  const items = visible.map((expense) => {
-    let shares = null;
-    try {
-      shares = expense.shares || (readOnly ? null : splitExpense(expense, incomes, memberIds));
-    } catch {}
-    return {
-      expense,
-      shares,
-      date: expense.date.split('-').reverse().join('/'),
-      payer:
-        expense.status === 'paid'
-          ? data.people.find((item) => item.id === expense.payer)?.name
-          : 'Ainda não paga',
-    };
-  });
+  const [essential, setEssential] = useState(false),
+    [companion, setCompanion] = useState(''),
+    [eventId, setEventId] = useState('');
+  const items = visible
+    .filter(
+      (e) =>
+        (!essential || e.essential === true) &&
+        (!companion || e.companion === companion) &&
+        (!eventId || e.eventId === eventId),
+    )
+    .map((expense) => {
+      let shares = null;
+      try {
+        shares = expense.shares || (readOnly ? null : splitExpense(expense, incomes, memberIds));
+      } catch {}
+      return {
+        expense,
+        shares,
+        date: expense.date.split('-').reverse().join('/'),
+        payer:
+          expense.status === 'paid'
+            ? data.people.find((item) => item.id === expense.payer)?.name
+            : 'Ainda não paga',
+      };
+    });
 
   function deleteExpense(expense) {
     if (confirm('Excluir a despesa ' + expense.description + '?')) {
@@ -136,8 +146,44 @@ export function ExpenseList({
           <option value="all">Todas as despesas</option>
           <option value="paid">Pagas</option>
           <option value="pending">Pendentes</option>
+          <option value="essential">Essenciais</option>
         </select>
       </label>
+      <div className="form-grid">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={essential}
+            onChange={(e) => setEssential(e.target.checked)}
+          />
+          Somente essenciais (combina com os outros filtros)
+        </label>
+        <label className="field">
+          Com quem
+          <select value={companion} onChange={(e) => setCompanion(e.target.value)}>
+            <option value="">Todos</option>
+            {[...new Set(expenses.map((e) => e.companion).filter(Boolean))].map((n) => (
+              <option key={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Evento
+          <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
+            <option value="">Todos</option>
+            {(data.events || [])
+              .filter((v) => expenses.some((e) => e.eventId === v.id))
+              .map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
+      <p className="muted">
+        Total no filtro: {money(items.reduce((sum, item) => sum + item.expense.amount, 0))}
+      </p>
       {items.length === 0 ? (
         <div className="empty">
           <h3>

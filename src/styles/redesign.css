@@ -947,3 +947,26 @@
 .category-catalog small {
   color: var(--muted);
 }
+
+.finance-annual table {
+  min-width: 1020px;
+}
+
+.finance-annual th,
+.finance-annual td {
+  white-space: nowrap;
+}
+
+.finance-record-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-block: 12px;
+  overflow-wrap: anywhere;
+}
+
+.finance-panel .summary-card:first-child p {
+  color: inherit;
+}

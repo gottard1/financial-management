@@ -28,6 +28,20 @@ import {
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { parseMoney, splitExpense } from '../domain/expenses/expenseCalculations.js';
 import { calculateWorkspace } from '../domain/budget/workspaceCalculations.js';
+import {
+  expenseMonth,
+  prepareExpense,
+  futureInstallments,
+  monthlyIncomes,
+} from '../domain/finance/extendedFinance.js';
+import {
+  FinanceSetupPanel,
+  IncomeEntriesPanel,
+  InvestmentsPanel,
+  ReserveLedgerPanel,
+  SavingsStrategyPanel,
+  AnnualPanel,
+} from '../features/finance/FinancePanels.jsx';
 import { sumRestrictedBenefits } from '../domain/income/calculateCompensation.js';
 import { ProfilePanel } from '../features/profile/ProfilePanel.jsx';
 import { BudgetPanel } from '../features/budget/BudgetPanel.jsx';
@@ -133,16 +147,16 @@ function FinanceApp({ storageNamespace }) {
   const scope = mode === 'group' ? (group ? 'group:' + group.id : '') : 'person:' + person;
   const memberIds = mode === 'group' ? group?.memberIds || [] : [person];
   const activeMemberIds = mode === 'group' ? activeGroupMembers(group) : [person];
-  const incomes = data.months[month] || {};
+  const incomes = monthlyIncomes(data, month);
   const profiles = data.incomeConfigs[month] || {};
-  const expenses = data.expenses.filter((e) => e.date.startsWith(month) && e.workspace === scope);
+  const expenses = data.expenses.filter((e) => expenseMonth(e) === month && e.workspace === scope);
   const plan = data.plans[scope + '|' + month] || {};
   let stats,
     benefits,
     statsError = '';
   try {
     if (scope) {
-      stats = calculateWorkspace(data, month, scope, incomes);
+      stats = calculateWorkspace(data, month, scope, data.months[month] || {});
       benefits = sumRestrictedBenefits(memberIds.map((id) => profiles[id]));
     }
   } catch (err) {
@@ -200,7 +214,7 @@ function FinanceApp({ storageNamespace }) {
     try {
       if (archivedGroup) throw new Error('Não é possível alterar despesas de um grupo excluído.');
       const item = {
-        ...draft,
+        ...prepareExpense(draft, data, parseMoney),
         ...(draft.installments
           ? {
               installments: {
@@ -210,15 +224,15 @@ function FinanceApp({ storageNamespace }) {
             }
           : {}),
         description: draft.description.trim(),
-        amount: parseMoney(draft.amount),
         percentages: Object.fromEntries(
           Object.entries(draft.percentages || {}).map(([id, value]) => [id, Number(value)]),
         ),
       };
       if (!item.description || item.amount <= 0)
         throw Error('Informe uma descrição e um valor maior que zero.');
-      if (!item.date.startsWith(month)) throw Error('A data deve pertencer ao mês selecionado.');
-      splitExpense(item, incomes, memberIds);
+      if (!item.cardId && !item.date.startsWith(month))
+        throw Error('A data deve pertencer ao mês selecionado.');
+      splitExpense(item, monthlyIncomes(data, expenseMonth(item)), memberIds);
       if (
         !draft.id &&
         (item.participants.some((id) => !activeMemberIds.includes(id)) ||
@@ -226,7 +240,17 @@ function FinanceApp({ storageNamespace }) {
       )
         throw new Error('Novas despesas devem usar apenas participantes ativos do grupo.');
       item.id = item.id || crypto.randomUUID();
-      setData((d) => ({ ...d, expenses: [...d.expenses.filter((x) => x.id !== item.id), item] }));
+      setData((d) => {
+        const expenses = [...d.expenses.filter((x) => x.id !== item.id), item];
+        return {
+          ...d,
+          expenses: [
+            ...expenses,
+            ...(draft.generateFuture ? futureInstallments(item, expenses) : []),
+          ],
+        };
+      });
+      if (item.cardId) setMonth(expenseMonth(item));
       close();
       setNotice('Despesa salva. Os totais foram atualizados.');
     } catch (err) {
@@ -239,7 +263,8 @@ function FinanceApp({ storageNamespace }) {
       ...e,
       participants: [...e.participants],
       percentages: { ...e.percentages },
-      amount: (e.amount / 100).toFixed(2).replace('.', ','),
+      amountMode: e.purchaseTotal === undefined ? 'installment' : 'total',
+      amount: ((e.purchaseTotal ?? e.amount) / 100).toFixed(2).replace('.', ','),
     });
   }
   function exportData() {
@@ -305,8 +330,7 @@ function FinanceApp({ storageNamespace }) {
     if (draft && draft.amount)
       preview = splitExpense(
         {
-          ...draft,
-          amount: parseMoney(draft.amount),
+          ...prepareExpense(draft, data, parseMoney),
           percentages: Object.fromEntries(
             Object.entries(draft.percentages || {}).map(([id, value]) => [id, Number(value)]),
           ),
@@ -317,7 +341,10 @@ function FinanceApp({ storageNamespace }) {
   } catch (err) {
     previewError = err.message;
   }
-  const visible = expenses.filter((e) => filter === 'all' || e.status === filter);
+  const visible = expenses.filter(
+    (e) =>
+      filter === 'all' || e.status === filter || (filter === 'essential' && e.essential === true),
+  );
   const go = (id) => {
     setTab(id);
     setError('');
@@ -337,6 +364,10 @@ function FinanceApp({ storageNamespace }) {
     notifications: 'Notificações',
     members: 'Participantes e convites',
     settings: 'Configurações do grupo',
+    financeSetup: 'Faturas e eventos',
+    incomeEntries: 'Receitas',
+    investments: 'Investimentos',
+    annual: 'Visão anual',
   };
   const pageTitle = titles[tab] || 'Meu financeiro';
   const pageDescription =
@@ -743,6 +774,28 @@ function FinanceApp({ storageNamespace }) {
             <ArchivedGroupHistory {...{ data, group, month, stats, tab }} error={statsError} />
           ) : (
             <>
+              {tab === 'financeSetup' && (
+                <FinanceSetupPanel
+                  key={scope}
+                  {...{ data, setData, scope, month }}
+                  notify={setNotice}
+                />
+              )}
+              {tab === 'incomeEntries' && mode === 'individual' && (
+                <IncomeEntriesPanel
+                  key={scope + month}
+                  {...{ data, setData, scope, month }}
+                  notify={setNotice}
+                />
+              )}
+              {tab === 'investments' && (
+                <InvestmentsPanel
+                  key={scope + month}
+                  {...{ data, setData, scope, month }}
+                  notify={setNotice}
+                />
+              )}
+              {tab === 'annual' && <AnnualPanel {...{ data, scope, month }} />}
               {statsError && (
                 <div className="notice error" role="alert">
                   <p>{statsError} Edite as rendas ou a forma de divisão das despesas.</p>
@@ -758,18 +811,32 @@ function FinanceApp({ storageNamespace }) {
                 <CategoriesPanel key={scope} {...{ data, setData, scope }} notify={setNotice} />
               )}
               {tab === 'budget' && stats && (
-                <BudgetPanel
-                  key={scope + month}
-                  {...{ data, setData, scope, month, stats }}
-                  notify={setNotice}
-                />
+                <>
+                  <BudgetPanel
+                    key={scope + month}
+                    {...{ data, setData, scope, month, stats }}
+                    notify={setNotice}
+                  />
+                  <SavingsStrategyPanel
+                    key={'strategy' + scope + month}
+                    {...{ data, setData, scope, month, stats }}
+                    notify={setNotice}
+                  />
+                </>
               )}
               {tab === 'savings' && stats && (
-                <SavingsPanel
-                  key={scope + month}
-                  {...{ data, setData, scope, month, stats }}
-                  notify={setNotice}
-                />
+                <>
+                  <SavingsPanel
+                    key={scope + month}
+                    {...{ data, setData, scope, month, stats }}
+                    notify={setNotice}
+                  />
+                  <ReserveLedgerPanel
+                    key={'ledger' + scope + month}
+                    {...{ data, setData, scope, month }}
+                    notify={setNotice}
+                  />
+                </>
               )}
               {tab === 'settlements' && stats && mode === 'group' && (
                 <>
@@ -852,6 +919,7 @@ function FinanceApp({ storageNamespace }) {
               )}
               {(tab === 'expenses' || tab === 'overview') && (
                 <ExpenseList
+                  key={scope}
                   {...{
                     mode,
                     data,

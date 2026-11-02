@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { Progress } from '../../components/ui/Progress.jsx';
+import { assetSummary } from '../../domain/finance/extendedFinance.js';
 const value = (c) => (c / 100).toFixed(2).replace('.', ',');
 export function SavingsPanel({ data, setData, scope, month, stats, notify, canDelete = true }) {
   const [error, setError] = useState('');
+  const [progressMode, setProgressMode] = useState('contributions');
+  const assets = assetSummary(data, scope, month + '-31');
   const goals = data.goals.filter((g) => g.scope === scope),
     contributions = data.contributions.filter((c) => c.scope === scope),
     monthly = contributions.filter((c) => c.date.startsWith(month));
@@ -43,6 +46,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
         amount = parseMoney(f.get('amount')),
         date = String(f.get('date')),
         goalId = String(f.get('goalId'));
+      const destinationId = String(f.get('destinationId') || '');
       if (amount <= 0) throw Error('O aporte deve ser maior que zero.');
       if (!date.startsWith(month)) throw Error('Escolha uma data no mês selecionado.');
       await setData((d) => ({
@@ -55,6 +59,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
             amount,
             date,
             goalId,
+            ...(destinationId ? { destinationId } : {}),
             note: String(f.get('note')).trim(),
           },
         ],
@@ -72,8 +77,12 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
         {[
           ['Guardado neste mês', stats.savingsThisMonth],
           ['Acumulado registrado', stats.savingsAll],
+          ['Saldo das reservas no fim do mês', assets.reserveTotal],
           scope.startsWith('group:')
-            ? ['Meta de guardar no mês', data.plans[scope + '|' + month]?.savingTarget || 0]
+            ? [
+                'Meta de guardar no mês',
+                stats.savingTarget ?? data.plans[scope + '|' + month]?.savingTarget ?? 0,
+              ]
             : ['Disponível previsto', stats.available],
         ].map(([label, amount]) => (
           <article className="card summary-card" key={label}>
@@ -90,8 +99,8 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
       <div className="notice">
         <p>
           Guardar dinheiro não é uma despesa: os aportes reduzem o disponível, mas ficam fora dos
-          gastos. Registre aqui valores efetivamente reservados. O acumulado não inclui rendimentos
-          nem retiradas.
+          gastos. Registre aqui valores efetivamente reservados. O saldo das reservas inclui as
+          movimentações e exclui valores transferidos para investimentos.
         </p>
       </div>
       <div className="two-col savings-forms">
@@ -121,6 +130,19 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
               <label className="field">
                 Observação
                 <input name="note" maxLength={120} placeholder="Ex.: reserva de emergência" />
+              </label>
+              <label className="field">
+                Destino da distribuição (opcional)
+                <select name="destinationId">
+                  <option value="">Sem classificação de distribuição</option>
+                  {(data.plans[scope + '|' + month]?.savingsStrategy?.distribution || []).map(
+                    (d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ),
+                  )}
+                </select>
               </label>
             </div>
             <div className="form-actions">
@@ -156,11 +178,24 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
           {error}
         </p>
       )}
+      <label className="field">
+        Como acompanhar o progresso das metas?
+        <select value={progressMode} onChange={(e) => setProgressMode(e.target.value)}>
+          <option value="contributions">Soma dos aportes históricos · opção atual</option>
+          <option value="balance">Saldo no fim do mês + investimentos vinculados</option>
+        </select>
+      </label>
       <div className="goal-grid">
         {goals.map((g) => {
-          const saved = contributions
-            .filter((c) => c.goalId === g.id)
-            .reduce((sum, c) => sum + c.amount, 0);
+          const netBalance =
+            (assets.reserves.get(g.id) || 0) +
+            assets.positions
+              .filter((p) => p.goalId === g.id)
+              .reduce((sum, p) => sum + p.current, 0);
+          const saved =
+            progressMode === 'contributions'
+              ? contributions.filter((c) => c.goalId === g.id).reduce((sum, c) => sum + c.amount, 0)
+              : netBalance;
           return (
             <article className="goal-card panel" key={g.id}>
               <div className="section-heading">
@@ -170,8 +205,20 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
                     className="button danger"
                     aria-label={'Excluir meta ' + g.title}
                     onClick={() => {
-                      if (contributions.some((c) => c.goalId === g.id)) {
-                        setError('Exclua os aportes vinculados antes de excluir esta meta.');
+                      if (
+                        contributions.some((c) => c.goalId === g.id) ||
+                        [
+                          ...(data.reserveMovements || []),
+                          ...(data.investments || []),
+                          ...(data.investmentMovements || []),
+                        ].some((c) => c.goalId === g.id || c.toGoalId === g.id) ||
+                        Object.values(data.plans).some((p) =>
+                          p.savingsStrategy?.distribution.some((d) => d.goalId === g.id),
+                        )
+                      ) {
+                        setError(
+                          'Esta meta possui registros ou uma estratégia vinculada. Preserve o objetivo para manter o histórico.',
+                        );
                         return;
                       }
                       if (confirm('Excluir esta meta?'))

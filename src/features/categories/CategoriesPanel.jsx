@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
-import { addExpenseCategory, categoryOptions } from '../../domain/expenses/expenseCategories.js';
+import {
+  addExpenseCategory,
+  categoryOptions,
+  addExtraCategory,
+  extraCategoryOptions,
+} from '../../domain/expenses/expenseCategories.js';
 import { CATEGORIES } from '../../shared/constants/categories.js';
 
 export function CategoriesPanel({ data, setData, scope, notify, canManage = true }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [kind, setKind] = useState('expenses');
   const shared = scope.startsWith('group:');
-  const categories = categoryOptions(data, scope);
+  const categories =
+    kind === 'expenses' ? categoryOptions(data, scope) : extraCategoryOptions(data, scope, kind);
   const owner = shared
     ? data.groups.find((group) => `group:${group.id}` === scope)
     : data.people.find((person) => `person:${person.id}` === scope);
@@ -16,7 +23,11 @@ export function CategoriesPanel({ data, setData, scope, notify, canManage = true
     if (!canManage || saving) return;
     setSaving(true);
     try {
-      await setData((current) => addExpenseCategory(current, scope, name));
+      await setData((current) =>
+        kind === 'expenses'
+          ? addExpenseCategory(current, scope, name)
+          : addExtraCategory(current, scope, kind, name),
+      );
       setName('');
       setError('');
       notify?.(
@@ -32,6 +43,20 @@ export function CategoriesPanel({ data, setData, scope, notify, canManage = true
     <section className="panel categories-panel">
       <p className="eyebrow">CADA GASTO NO SEU LUGAR</p>
       <h2>{shared ? `Categorias de ${owner?.name || 'seu grupo'}` : 'Minhas categorias'}</h2>
+      <label className="field">
+        Tipo de categoria
+        <select
+          value={kind}
+          onChange={(e) => {
+            setKind(e.target.value);
+            setError('');
+          }}
+        >
+          <option value="expenses">Despesas</option>
+          {!shared && <option value="incomeCategories">Receitas</option>}
+          <option value="investmentTypes">Investimentos</option>
+        </select>
+      </label>
       <p className="muted section-intro">
         {shared
           ? 'As categorias deste grupo ficam disponíveis para todos os participantes.'

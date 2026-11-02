@@ -2,6 +2,10 @@
 
 ## Decisões desta versão
 
+### Extensões financeiras opcionais
+
+As regras do Excel e investimentos são extensões aditivas do v3. `domain/finance/extendedFinance` concentra competências de faturas, conservação do total parcelado, integração de recebimentos, reservas, posições manuais, projeções e sugestões de economia. `migrateData` valida as novas coleções opcionais, com listas vazias quando ausentes; codec, backup, regras e servidor compartilham esses contratos. Os painéis em `features/finance` usam os mesmos adaptadores de persistência da conta e do grupo. Não há execução de macros nem importação de dados da planilha. Veja [regras, compatibilidade e uso](excel-finance-and-investments.md).
+
 ### Domínio independente
 
 Rateio, tributos e resumo mensal são funções puras. Recebem dados explícitos e retornam resultados ou erros de validação. Não acessam estado global nem DOM. O dinheiro trafega em centavos inteiros; conversão de entrada e formatação ocorrem nas bordas da interface.
@@ -80,7 +84,7 @@ O líquido e as configurações de entrada são persistidos. Detalhes tributári
 | `Payment` e `PaymentSource`               | Pagamentos parciais, vários pagadores, contas/cartões e consumo de VA/VR     | Conforme a necessidade de conciliação      |
 | `ReserveMovement`                         | Aportes, retiradas e transferências entre reservas                           | Conforme a necessidade de retiradas        |
 
-Essas propostas não foram adicionadas nesta mudança. Novas entidades exigem valores padrão/migração, validação, inclusão no codec e regras, projeção pública por lista explícita e testes de persistência e isolamento. Novos campos públicos não devem carregar perfis ou salários individuais.
+`IncomeEntry` e `ReserveMovement` agora estão implementados como coleções opcionais, juntamente com cartões, eventos, ativos, movimentos e avaliações de investimentos. As demais propostas continuam evoluções futuras. Novas entidades exigem valores padrão/migração, validação, inclusão no codec e regras, projeção pública por lista explícita e testes de persistência e isolamento. Novos campos públicos não devem carregar perfis ou salários individuais.
 
 `workspace`/`scope` usam `person:<id>` ou `group:<id>`. Rendas e configurações são mapas por ID da pessoa, dentro de cada mês. Adicionar ou renomear alguém não muda os vínculos dos registros existentes.
 
@@ -131,8 +135,8 @@ O total nominal de benefícios não é um saldo de cartão. Rastrear pagamentos 
 - **Fechamento de mês:** salvar renda e divisão como snapshots para impedir que edições retroativas alterem períodos fechados.
 - **Pagamentos:** separar obrigações de pagamentos para suportar parcelas, pagamentos parciais e múltiplos pagadores.
 - **Acertos:** registrar transferências entre membros separadamente das despesas.
-- **Reservas:** adicionar retiradas e transferências entre espaços sem classificá-las como consumo.
-- **Receitas:** evoluir do perfil mensal único para várias fontes de entrada por pessoa.
+- **Reservas:** retiradas e transferências entre destinos do mesmo espaço estão disponíveis. Transferências entre espaços continuam uma evolução futura.
+- **Receitas:** recebimentos individuais complementam ou substituem opcionalmente o total mensal, com prevenção explícita de repetição do perfil.
 - **Histórico fiscal:** associar competência, tabela usada e premissas ao resultado da simulação.
 
 ## Verificação e manutenção
@@ -147,7 +151,7 @@ O total nominal de benefícios não é um saldo de cartão. Rastrear pagamentos 
 
 ## Escopo intencional
 
-Não há serviços de backend, autenticação simulada, contas bancárias conectadas ou pagamentos reais. Não há necessidade de infraestrutura adicional para executar a versão local. O desenho organiza o projeto para crescer por funcionalidades, sem introduzir serviços ou bibliotecas antes de existirem requisitos que os justifiquem.
+Não há contas bancárias conectadas ou pagamentos reais. A API autenticada de grupos complementa a persistência privada Firebase; o modo local de desenvolvimento não precisa dessa infraestrutura. As posições de investimento são registros manuais. O desenho organiza o projeto para crescer por funcionalidades, sem introduzir serviços ou bibliotecas antes de existirem requisitos que os justifiquem.
 
 ## Autenticação e isolamento local
 

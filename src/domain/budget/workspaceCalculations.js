@@ -3,6 +3,15 @@ import { validateInstallments } from '../expenses/recurringExpenses.js';
 import { validatePaymentReport } from '../settlements/paymentReports.js';
 import { validateCategoryNames } from '../expenses/expenseCategories.js';
 import {
+  extensionArrays,
+  validateExtensions,
+  expenseMonth,
+  monthlyIncomes,
+  monthlyAssetFlows,
+  assetSummary,
+  savingsSuggestions,
+} from '../finance/extendedFinance.js';
+import {
   applySettlements,
   validateSettlementRecord,
 } from '../settlements/settlementCalculations.js';
@@ -240,6 +249,7 @@ export function migrateData(input) {
       contributions: [],
       settlements: [],
       paymentReports: [],
+      ...Object.fromEntries(extensionArrays.map((kind) => [kind, []])),
     };
   record(input, 'Backup financeiro');
   if (![1, 2, 3].includes(input.version))
@@ -258,6 +268,8 @@ export function migrateData(input) {
     uniqueId(person.id, personIds, 'pessoa');
     text(person.name, 'Nome da pessoa');
     if (person.categories !== undefined) validateCategoryNames(person.categories);
+    for (const field of ['incomeCategories', 'investmentTypes'])
+      if (person[field] !== undefined) validateCategoryNames(person[field]);
     if (person.removed !== undefined && typeof person.removed !== 'boolean')
       throw new Error('Situação da pessoa inválida.');
     return { ...person };
@@ -270,6 +282,8 @@ export function migrateData(input) {
     uniqueId(group.id, groupIds, 'grupo');
     text(group.name, 'Nome do grupo');
     if (group.categories !== undefined) validateCategoryNames(group.categories);
+    for (const field of ['incomeCategories', 'investmentTypes'])
+      if (group[field] !== undefined) validateCategoryNames(group[field]);
     if (group.deleted !== undefined && typeof group.deleted !== 'boolean')
       throw new Error('Situação do grupo inválida.');
     if (
@@ -465,7 +479,7 @@ export function migrateData(input) {
       ...(plan.categories !== undefined ? { categories: { ...plan.categories } } : {}),
     };
   }
-  return {
+  const result = {
     ...raw,
     version: 3,
     people,
@@ -481,15 +495,19 @@ export function migrateData(input) {
       ...settlement,
       ...(settlement.receipt ? { receipt: { ...settlement.receipt } } : {}),
     })),
+    ...Object.fromEntries(extensionArrays.map((kind) => [kind, raw[kind] ?? []])),
   };
+  validateExtensions(result, scopeMembers);
+  return result;
 }
 
 export function calculateWorkspace(data, month, scope, incomes) {
   monthKey(month);
   record(incomes, 'Rendas');
   Object.values(incomes).forEach((value) => cents(value, 'Renda'));
+  incomes = monthlyIncomes(data, month, incomes);
   const members = scopeMembers(data, scope);
-  const currentExpenses = data.expenses.filter((expense) => monthOf(expense.date) === month);
+  const currentExpenses = data.expenses.filter((expense) => expenseMonth(expense) === month);
   const categories = Object.create(null);
   const addCategory = (category, amount) => {
     const key = typeof category === 'string' && category.trim() ? category : 'Outros';
@@ -554,13 +572,32 @@ export function calculateWorkspace(data, month, scope, incomes) {
     if (contributionMonth === month)
       savingsThisMonth = sum([savingsThisMonth, contribution.amount]);
   }
+  const flows = monthlyAssetFlows(data, scope, month);
+  const assets = assetSummary(data, scope, month + '-31');
+  savingsThisMonth = sum([savingsThisMonth, flows.deposits]);
+  const balanceBeforeContributions = safe(BigInt(income) - BigInt(stats.total));
+  const plan = data.plans?.[`${scope}|${month}`] || {};
   return {
     ...stats,
     income,
     categories: { ...categories },
     savingsThisMonth,
     savingsAll,
-    available: safe(BigInt(income) - BigInt(stats.total) - BigInt(savingsThisMonth)),
+    balanceBeforeContributions,
+    savingTarget: plan.savingsStrategy
+      ? savingsSuggestions(plan.savingsStrategy, income, balanceBeforeContributions).target
+      : plan.savingTarget || 0,
+    redemptions: flows.redemptions,
+    investmentApplications: flows.applications,
+    reserveBalance: assets.reserveTotal,
+    invested: assets.invested,
+    wealth: assets.wealth,
+    available: safe(
+      BigInt(balanceBeforeContributions) +
+        BigInt(flows.redemptions) -
+        BigInt(savingsThisMonth) -
+        BigInt(flows.applications),
+    ),
     expensePersonalTotal,
     sharedShareTotal,
   };

@@ -110,6 +110,89 @@ const bill = {
   split: 'proportional',
   percentages: {},
 };
+test('new shared cards, events, reserve transfers and investments commit together without private income or duplicate wealth', async () => {
+  const { execute, read, rows } = harness();
+  const result = await execute('member', {
+    action: 'upsert',
+    changes: [
+      { kind: 'cards', id: 'card', value: { name: 'Cartão grupo', closingDay: 10, dueDay: 20 } },
+      { kind: 'events', id: 'event', value: { name: 'Viagem' } },
+      {
+        kind: 'reserveMovements',
+        id: 'opening',
+        value: { kind: 'opening', amount: 10000, date: '2026-11-01', goalId: '' },
+      },
+      {
+        kind: 'investments',
+        id: 'asset',
+        value: { name: 'CDB grupo', type: 'Renda fixa', institution: 'Banco' },
+      },
+      {
+        kind: 'investmentMovements',
+        id: 'application',
+        value: {
+          investmentId: 'asset',
+          kind: 'application',
+          funding: 'reserve',
+          amount: 6000,
+          date: '2026-11-02',
+          goalId: '',
+        },
+      },
+      {
+        kind: 'investmentValuations',
+        id: 'valuation',
+        value: { investmentId: 'asset', amount: 6500, date: '2026-11-03' },
+      },
+      {
+        kind: 'expenses',
+        id: 'bill',
+        value: { ...bill, essential: true, companion: 'Família', eventId: 'event' },
+      },
+    ],
+  });
+  const saved = read();
+  assert.equal(saved.revision, 2);
+  assert.equal(saved.data.investmentMovements.length, 1);
+  assert.equal(rows.get('sharedGroups/owner_home').financeRevision, 2);
+  assert.equal(result.snapshot.overview['2026-11'].stats.reserveBalance, 4000);
+  assert.equal(result.snapshot.overview['2026-11'].stats.invested, 6500);
+  assert.equal(result.snapshot.overview['2026-11'].stats.wealth, 10500);
+  assert.equal(result.snapshot.overview['2026-11'].stats.income, undefined);
+  assert.equal(result.snapshot.people[0].profile, undefined);
+  const prior = JSON.stringify([...rows]);
+  await assert.rejects(
+    () =>
+      execute('member', {
+        revision: 2,
+        action: 'upsert',
+        changes: [
+          {
+            kind: 'investmentMovements',
+            id: 'bad',
+            value: {
+              investmentId: 'asset',
+              kind: 'redemption',
+              funding: 'cash',
+              date: '2026-11-04',
+              amount: 99999,
+            },
+          },
+        ],
+      }),
+    { status: 400 },
+  );
+  assert.equal(JSON.stringify([...rows]), prior);
+  await assert.rejects(
+    () =>
+      execute('outsider', {
+        revision: 2,
+        action: 'upsert',
+        changes: [{ kind: 'events', id: 'bad', value: { name: 'Ataque' } }],
+      }),
+    { status: 403 },
+  );
+});
 test('member edits persist in owner finance and public group atomically without returning private data', async () => {
   const { execute, read, rows } = harness();
   const result = await execute('member', {

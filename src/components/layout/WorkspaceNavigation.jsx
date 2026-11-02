@@ -10,6 +10,9 @@ export function WorkspaceNavigation({ mode, tab, onNavigate, administrator }) {
           ['budget', 'Orçamento'],
           ['categories', 'Categorias'],
           ['savings', 'Metas'],
+          ['financeSetup', 'Faturas e eventos'],
+          ['investments', 'Investimentos'],
+          ['annual', 'Visão anual'],
           ['members', 'Participantes'],
           ...(administrator ? [['settings', 'Configurações']] : []),
           ['overview', 'Visão geral'],
@@ -21,6 +24,10 @@ export function WorkspaceNavigation({ mode, tab, onNavigate, administrator }) {
           ['budget', 'Orçamento'],
           ['categories', 'Categorias'],
           ['savings', 'Metas e reservas'],
+          ['incomeEntries', 'Receitas'],
+          ['financeSetup', 'Faturas e eventos'],
+          ['investments', 'Investimentos'],
+          ['annual', 'Visão anual'],
         ];
   return (
     <div className="workspace-navigation">

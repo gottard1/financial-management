@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { recurrenceLabel } from '../../domain/expenses/recurringExpenses.js';
+import { installmentAmount } from '../../domain/finance/extendedFinance.js';
 
 export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
   const dialog = useRef();
@@ -14,7 +15,17 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
           amount:
             item.fixedAmountType === 'variable'
               ? ''
-              : (item.amount / 100).toFixed(2).replace('.', ','),
+              : (
+                  (item.purchaseTotal !== undefined
+                    ? installmentAmount(
+                        item.purchaseTotal,
+                        item.installments.total,
+                        item.installments.current + 1,
+                      )
+                    : item.amount) / 100
+                )
+                  .toFixed(2)
+                  .replace('.', ','),
         },
       ]),
     ),
@@ -95,6 +106,7 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
                   required={entries[item.id].selected}
                   disabled={!entries[item.id].selected}
                   inputMode="decimal"
+                  readOnly={item.purchaseTotal !== undefined}
                   value={entries[item.id].amount}
                   placeholder="Informe o valor atual"
                   onChange={(event) => update(item.id, { amount: event.target.value })}

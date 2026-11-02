@@ -17,13 +17,24 @@ import { saveSharedSettlement } from '../../infrastructure/firebase/sharedSettle
 import { SharedGroupInvitationPanel } from './SharedGroupInvitationPanel.jsx';
 import { MonthlySummary } from '../overview/MonthlySummary.jsx';
 import { PaymentRequests } from '../notifications/NotificationsPanel.jsx';
+import {
+  prepareExpense,
+  futureInstallments,
+  expenseMonth,
+} from '../../domain/finance/extendedFinance.js';
+import {
+  FinanceSetupPanel,
+  InvestmentsPanel,
+  ReserveLedgerPanel,
+  SavingsStrategyPanel,
+  AnnualPanel,
+} from '../finance/FinancePanels.jsx';
 
 const amountText = (amount) => (amount / 100).toFixed(2).replace('.', ',');
-function expenseInput(draft, scope) {
+function expenseInput(draft, scope, data) {
   return {
-    ...draft,
+    ...prepareExpense(draft, data, parseMoney),
     workspace: scope,
-    amount: parseMoney(draft.amount),
     description: draft.description.trim(),
     percentages: Object.fromEntries(
       Object.entries(draft.percentages || {}).map(([id, value]) => [id, Number(value)]),
@@ -87,7 +98,7 @@ export function SharedGroupWorkspace({
   );
   const members = data.groups[0].memberIds;
   const active = snapshot.activeMemberIds || members;
-  const expenses = data.expenses.filter((item) => item.date.startsWith(month));
+  const expenses = data.expenses.filter((item) => expenseMonth(item) === month);
   const context = useRef(null);
   context.current = { group, data, scope };
 
@@ -106,7 +117,7 @@ export function SharedGroupWorkspace({
     let current = true;
     const timer = setTimeout(async () => {
       try {
-        const item = expenseInput(draft, scope);
+        const item = expenseInput(draft, scope, data);
         let shares;
         if (item.split !== 'proportional') shares = splitExpense(item, {}, members);
         else {
@@ -192,18 +203,29 @@ export function SharedGroupWorkspace({
   }
   function edit(item) {
     setError('');
-    setDraft({ ...item, amount: amountText(item.amount), percentages: { ...item.percentages } });
+    setDraft({
+      ...item,
+      amountMode: item.purchaseTotal === undefined ? 'installment' : 'total',
+      amount: amountText(item.purchaseTotal ?? item.amount),
+      percentages: { ...item.percentages },
+    });
   }
   async function saveExpense(event) {
     event.preventDefault();
     try {
-      const item = { ...expenseInput(draft, scope), id: draft.id || newId.current };
-      if (!item.date.startsWith(month))
+      const item = { ...expenseInput(draft, scope, data), id: draft.id || newId.current };
+      if (!item.cardId && !item.date.startsWith(month))
         throw new Error('A data deve pertencer ao mês selecionado.');
-      await setData((current) => ({
-        ...current,
-        expenses: [...current.expenses.filter((expense) => expense.id !== item.id), item],
-      }));
+      await setData((current) => {
+        const expenses = [...current.expenses.filter((expense) => expense.id !== item.id), item];
+        return {
+          ...current,
+          expenses: [
+            ...expenses,
+            ...(draft.generateFuture ? futureInstallments(item, expenses) : []),
+          ],
+        };
+      });
       setDraft(null);
     } catch (err) {
       setError(err.message);
@@ -280,6 +302,13 @@ export function SharedGroupWorkspace({
       )}
       {busy && <p role="status">Salvando alterações do grupo…</p>}
       <div inert={busy ? true : undefined}>
+        {selectedTab === 'financeSetup' && (
+          <FinanceSetupPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
+        )}
+        {selectedTab === 'investments' && (
+          <InvestmentsPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
+        )}
+        {selectedTab === 'annual' && <AnnualPanel {...common} snapshot={snapshot} />}
         {selectedTab === 'groups' && (
           <SharedGroupInvitationPanel
             snapshot={snapshot}
@@ -300,10 +329,36 @@ export function SharedGroupWorkspace({
             <>
               {selectedTab === 'overview' && <MonthlyOverview {...overview} {...common} go={go} />}
               {selectedTab === 'budget' && (
-                <BudgetPanel key={scope + month} {...common} setData={setData} notify={setNotice} />
+                <>
+                  <BudgetPanel
+                    key={scope + month}
+                    {...common}
+                    setData={setData}
+                    notify={setNotice}
+                  />
+                  <SavingsStrategyPanel
+                    key={'strategy' + scope + month}
+                    {...common}
+                    setData={setData}
+                    notify={setNotice}
+                  />
+                </>
               )}
               {selectedTab === 'savings' && (
-                <SavingsPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
+                <>
+                  <SavingsPanel
+                    {...common}
+                    setData={setData}
+                    notify={setNotice}
+                    canDelete={false}
+                  />
+                  <ReserveLedgerPanel
+                    {...common}
+                    setData={setData}
+                    notify={setNotice}
+                    canDelete={false}
+                  />
+                </>
               )}
               {selectedTab === 'settlements' && (
                 <>
@@ -348,7 +403,12 @@ export function SharedGroupWorkspace({
             group={data.groups[0]}
             memberIds={members}
             expenses={expenses}
-            visible={expenses.filter((item) => filter === 'all' || item.status === filter)}
+            visible={expenses.filter(
+              (item) =>
+                filter === 'all' ||
+                item.status === filter ||
+                (filter === 'essential' && item.essential === true),
+            )}
             filter={filter}
             setFilter={setFilter}
             incomes={{}}

@@ -31,7 +31,12 @@ export function MonthlySummary({ stats, mode, benefits, receiverId }) {
     : [
         ['Renda em dinheiro', stats.income],
         ['Despesas previstas', stats.total],
+        ['Saldo antes dos aportes', stats.balanceBeforeContributions ?? stats.income - stats.total],
         ['Guardado no mês', stats.savingsThisMonth],
+        ...(stats.investmentApplications
+          ? [['Aplicações do caixa', stats.investmentApplications]]
+          : []),
+        ...(stats.redemptions ? [['Resgates · não são renda nova', stats.redemptions]] : []),
       ];
   return (
     <>

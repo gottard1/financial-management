@@ -12,6 +12,11 @@ export function publicGroupStats(stats) {
       'categories',
       'savingsThisMonth',
       'savingsAll',
+      'reserveBalance',
+      'invested',
+      'wealth',
+      'investmentApplications',
+      'redemptions',
     ].map((key) => [key, stats[key]]),
   );
 }

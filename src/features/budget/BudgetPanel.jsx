@@ -24,7 +24,15 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
         savingTarget = parseMoney(f.get('savingTarget'));
       await setData((d) => ({
         ...d,
-        plans: { ...d.plans, [scope + '|' + month]: { spendingLimit, savingTarget, categories } },
+        plans: {
+          ...d.plans,
+          [scope + '|' + month]: {
+            ...d.plans[scope + '|' + month],
+            spendingLimit,
+            savingTarget,
+            categories,
+          },
+        },
       }));
       setError('');
       notify('Orçamento e meta mensal salvos.');
@@ -85,7 +93,7 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
             <strong>{money(stats.savingsThisMonth)}</strong>
             <Progress
               amount={stats.savingsThisMonth}
-              target={plan.savingTarget || 0}
+              target={stats.savingTarget ?? plan.savingTarget ?? 0}
               label="Meta mensal de economia"
             />
           </div>

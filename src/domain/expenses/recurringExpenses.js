@@ -1,4 +1,10 @@
 import { parseMoney } from './expenseCalculations.js';
+import {
+  expenseMonth,
+  installmentAmount,
+  dateInMonth,
+  addMonths,
+} from '../finance/extendedFinance.js';
 
 export function validateInstallments(expense) {
   if (expense.installments === undefined) return;
@@ -23,7 +29,12 @@ export function recurrenceLabel(expense) {
   if (!expense.fixed) return '';
   if (expense.installments)
     return `Parcela ${expense.installments.current} de ${expense.installments.total}${expense.installments.current === expense.installments.total ? ' · última' : ''}`;
-  return expense.fixedAmountType === 'variable' ? 'Recorrente variável' : 'Recorrente fixa';
+  return (
+    (expense.fixedAmountType === 'variable' ? 'Recorrente variável' : 'Recorrente fixa') +
+    (expense.recurrence
+      ? ` · mês ${expense.recurrence.current} de ${expense.recurrence.total}`
+      : '')
+  );
 }
 
 function monthParts(month) {
@@ -36,7 +47,7 @@ export function recurringCandidates(expenses, scope, month) {
   const previous = `${number === 1 ? year - 1 : year}-${String(number === 1 ? 12 : number - 1).padStart(2, '0')}`;
   const existing = new Set(
     expenses
-      .filter((item) => item.workspace === scope && item.date.startsWith(month))
+      .filter((item) => item.workspace === scope && expenseMonth(item) === month)
       .map((item) => item.originId || item.id),
   );
   const seen = new Set(existing);
@@ -45,12 +56,13 @@ export function recurringCandidates(expenses, scope, month) {
     if (
       item.workspace !== scope ||
       !item.fixed ||
-      !item.date.startsWith(previous) ||
+      expenseMonth(item) !== previous ||
       seen.has(origin)
     )
       return false;
     validateInstallments(item);
     if (item.installments && item.installments.current >= item.installments.total) return false;
+    if (item.recurrence && item.recurrence.current >= item.recurrence.total) return false;
     seen.add(origin);
     return true;
   });
@@ -78,7 +90,14 @@ export function copyRecurringExpenses(
         throw new Error(
           `${item.description} inclui um participante removido. Cadastre uma nova recorrência com os participantes atuais.`,
         );
-      const amount = parseMoney(entries[item.id].amount);
+      const amount =
+        item.purchaseTotal === undefined
+          ? parseMoney(entries[item.id].amount)
+          : installmentAmount(
+              item.purchaseTotal,
+              item.installments.total,
+              item.installments.current + 1,
+            );
       if (amount <= 0) throw new Error(`Informe um valor maior que zero para ${item.description}.`);
       return {
         ...item,
@@ -86,6 +105,15 @@ export function copyRecurringExpenses(
         originId: item.originId || item.id,
         amount,
         date: `${month}-${String(Math.min(Number(item.date.slice(-2)), lastDay)).padStart(2, '0')}`,
+        ...(item.cardId
+          ? {
+              invoiceMonth: month,
+              date: dateInMonth(addMonths(item.date.slice(0, 7), 1), Number(item.date.slice(-2))),
+            }
+          : {}),
+        ...(item.recurrence
+          ? { recurrence: { ...item.recurrence, current: item.recurrence.current + 1 } }
+          : {}),
         status: 'pending',
         participants: [...item.participants],
         percentages: { ...item.percentages },

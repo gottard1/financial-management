@@ -3,6 +3,7 @@ import { stableJson } from '../budget/financeCloudCodec.js';
 import { splitExpense } from '../expenses/expenseCalculations.js';
 import { copyRecurringExpenses } from '../expenses/recurringExpenses.js';
 import { activeGroupMembers } from './groupMembers.js';
+import { extensionArrays, expenseMonth, monthlyIncomes } from '../finance/extendedFinance.js';
 
 const fields = {
   expenses: [
@@ -18,11 +19,50 @@ const fields = {
     'fixed',
     'fixedAmountType',
     'installments',
+    'essential',
+    'companion',
+    'eventId',
+    'cardId',
+    'purchaseDate',
+    'invoiceMonth',
+    'cardTerms',
+    'purchaseTotal',
+    'recurrence',
+    'originId',
   ],
   goals: ['title', 'target', 'targetDate'],
-  contributions: ['amount', 'date', 'goalId', 'note'],
-  plans: ['spendingLimit', 'savingTarget', 'categories'],
+  contributions: ['amount', 'date', 'goalId', 'note', 'destinationId'],
+  plans: [
+    'spendingLimit',
+    'savingTarget',
+    'categories',
+    'savingsStrategy',
+    'savingsStrategyHistory',
+  ],
+  cards: ['name', 'closingDay', 'dueDay'],
+  events: ['name'],
+  reserveMovements: ['kind', 'amount', 'date', 'goalId', 'toGoalId', 'note', 'destinationId'],
+  investments: ['name', 'type', 'institution', 'identifier', 'goalId'],
+  investmentMovements: [
+    'investmentId',
+    'kind',
+    'amount',
+    'date',
+    'funding',
+    'goalId',
+    'note',
+    'destinationId',
+    'realizedGain',
+    'realizedLoss',
+  ],
+  investmentValuations: ['investmentId', 'amount', 'date', 'note'],
 };
+export const sharedExtensionKinds = extensionArrays.filter((kind) => kind !== 'incomeEntries');
+export const publicExtensionRecord = (kind, item) => ({
+  id: item.id,
+  scope: item.scope,
+  ...pick(item, fields[kind]),
+});
 const pick = (value, keys) =>
   Object.fromEntries(
     keys.filter((key) => Object.hasOwn(value, key)).map((key) => [key, value[key]]),
@@ -38,6 +78,7 @@ export function sharedGroupData(snapshot) {
         id: snapshot.id,
         name: snapshot.name,
         categories: snapshot.categories || [],
+        investmentTypes: snapshot.investmentTypes || [],
         adminPersonId: snapshot.adminPersonId,
         memberIds: snapshot.people.map((person) => person.id),
         removedMemberIds: snapshot.people
@@ -53,6 +94,7 @@ export function sharedGroupData(snapshot) {
     expenses: snapshot.expenses.map((expense) => ({ ...expense, workspace: scope })),
     goals: snapshot.goals || [],
     contributions: snapshot.contributions || [],
+    ...Object.fromEntries(sharedExtensionKinds.map((kind) => [kind, snapshot[kind] || []])),
     plans: Object.fromEntries(
       Object.entries(snapshot.overview || {}).map(([month, overview]) => [
         `${scope}|${month}`,
@@ -66,7 +108,7 @@ export function sharedGroupData(snapshot) {
 /** Translate shared forms to explicit upserts; omissions can never delete history. */
 export function sharedGroupChanges(previous, next) {
   const changes = [];
-  for (const kind of ['expenses', 'goals', 'contributions']) {
+  for (const kind of ['expenses', 'goals', 'contributions', ...sharedExtensionKinds]) {
     if (previous[kind].some((item) => !next[kind].some((value) => value.id === item.id)))
       throw new Error('Somente o administrador pode excluir registros do grupo.');
     for (const item of next[kind]) {
@@ -79,6 +121,23 @@ export function sharedGroupChanges(previous, next) {
             ...pick(item, fields[kind]),
             ...(kind === 'expenses' && old?.installments && !item.installments
               ? { installments: null }
+              : {}),
+            ...(kind === 'expenses'
+              ? Object.fromEntries(
+                  [
+                    'recurrence',
+                    'purchaseTotal',
+                    'cardTerms',
+                    'invoiceMonth',
+                    'purchaseDate',
+                    'cardId',
+                    'eventId',
+                    'essential',
+                    'companion',
+                  ]
+                    .filter((key) => Object.hasOwn(old || {}, key) && !Object.hasOwn(item, key))
+                    .map((key) => [key, null]),
+                )
               : {}),
           },
         });
@@ -98,8 +157,8 @@ export function applySharedGroupChanges(input, groupId, changes) {
   if (!group) throw new Error('Grupo indisponível.');
   const scope = `group:${groupId}`;
   const active = activeGroupMembers(group);
-  if (!Array.isArray(changes) || changes.length < 1 || changes.length > 100)
-    throw new Error('Informe de 1 a 100 alterações por vez.');
+  if (!Array.isArray(changes) || changes.length < 1 || changes.length > 450)
+    throw new Error('Informe de 1 a 450 alterações por vez.');
   for (const change of changes) {
     const { kind, id, value } = change || {};
     if (
@@ -125,8 +184,31 @@ export function applySharedGroupChanges(input, groupId, changes) {
       throw new Error('O registro pertence a outro espaço.');
     const item = { ...existing, ...pick(value, fields[kind]), id, [scopeKey]: scope };
     if (kind === 'expenses') {
+      if (
+        !existing &&
+        item.originId &&
+        data.expenses.some(
+          (e) =>
+            e.workspace === scope &&
+            (e.originId || e.id) === item.originId &&
+            expenseMonth(e) === expenseMonth(item),
+        )
+      )
+        throw new Error('Esta ocorrência já foi registrada.');
       // Unchecking recurrence and installments must remove the optional old terms.
       if (value.installments === null || !item.fixed) delete item.installments;
+      for (const key of [
+        'recurrence',
+        'purchaseTotal',
+        'cardTerms',
+        'invoiceMonth',
+        'purchaseDate',
+        'cardId',
+        'eventId',
+        'essential',
+        'companion',
+      ])
+        if (item[key] === null) delete item[key];
       const prior = existing ? [...existing.participants, existing.payer] : [];
       if (
         [...(item.participants || []), item.payer].some(
@@ -135,7 +217,7 @@ export function applySharedGroupChanges(input, groupId, changes) {
       )
         throw new Error('Selecione apenas participantes ativos para novos vínculos.');
       if (item.amount <= 0) throw new Error('A despesa deve ser maior que zero.');
-      splitExpense(item, data.months[item.date?.slice(0, 7)] || {}, group.memberIds);
+      splitExpense(item, monthlyIncomes(data, expenseMonth(item)), group.memberIds);
     }
     data = { ...data, [kind]: [...data[kind].filter((record) => record.id !== id), item] };
   }
@@ -153,6 +235,6 @@ export function copySharedRecurring(data, groupId, month, entries) {
     undefined,
     activeGroupMembers(group),
   );
-  copies.forEach((item) => splitExpense(item, data.months[month] || {}, group.memberIds));
+  copies.forEach((item) => splitExpense(item, monthlyIncomes(data, month), group.memberIds));
   return migrateData({ ...data, expenses: [...data.expenses, ...copies] });
 }

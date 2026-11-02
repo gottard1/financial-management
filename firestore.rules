@@ -35,9 +35,9 @@ service cloud.firestore {
       function validRecord() {
         let next = request.resource.data;
         let state = stateAfter();
-        return recordId.matches('(people|groups|expenses|goals|contributions|settlements|paymentReports|income|plans):.*') &&
+        return recordId.matches('(people|groups|expenses|goals|contributions|settlements|paymentReports|income|plans|cards|events|incomeEntries|reserveMovements|investments|investmentMovements|investmentValuations):.*') &&
           next.keys().hasOnly(['kind', 'key', 'payload', 'revision']) && next.key is string &&
-          next.kind in ['people', 'groups', 'expenses', 'goals', 'contributions', 'settlements', 'paymentReports', 'income', 'plans'] &&
+          next.kind in ['people', 'groups', 'expenses', 'goals', 'contributions', 'settlements', 'paymentReports', 'income', 'plans', 'cards', 'events', 'incomeEntries', 'reserveMovements', 'investments', 'investmentMovements', 'investmentValuations'] &&
           next.payload is string && next.payload.size() <= 750000 && next.revision == state.revision;
       }
       allow read: if owner();

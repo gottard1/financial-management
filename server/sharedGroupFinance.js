@@ -9,6 +9,7 @@ import { prepareEmailInvitation } from '../src/domain/groups/emailInvitation.js'
 import { splitExpense } from '../src/domain/expenses/expenseCalculations.js';
 import { activeGroupMembers } from '../src/domain/groups/groupMembers.js';
 import { editGroupPayment } from './groupPaymentReports.js';
+import { expenseMonth, monthlyIncomes } from '../src/domain/finance/extendedFinance.js';
 
 const problem = (status, message) => Object.assign(new Error(message), { status });
 
@@ -75,7 +76,7 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
           return {
             shares: splitExpense(
               expense,
-              next.months[expense.date.slice(0, 7)] || {},
+              monthlyIncomes(next, expenseMonth(expense)),
               next.groups.find((item) => item.id === groupId).memberIds,
             ),
           };

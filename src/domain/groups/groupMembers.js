@@ -1,3 +1,4 @@
+import { extensionArrays } from '../finance/extendedFinance.js';
 export const activeGroupMembers = (group) =>
   group?.deleted
     ? []
@@ -21,6 +22,10 @@ export function groupHistoryCount(data, groupId) {
     (data.paymentReports || []).filter((item) => item.scope === scope).length +
     data.goals.filter((item) => item.scope === scope).length +
     data.contributions.filter((item) => item.scope === scope).length +
+    extensionArrays.reduce(
+      (n, kind) => n + (data[kind] || []).filter((item) => item.scope === scope).length,
+      0,
+    ) +
     Object.keys(data.plans).filter((key) => key.startsWith(`${scope}|`)).length
   );
 }
@@ -45,7 +50,19 @@ export function purgeGroupHistoryBatch(data, groupId, limit = 300) {
   let remaining = limit;
   const next = { ...data };
   // Contributions must be removed before their goals.
-  for (const key of ['contributions', 'expenses', 'settlements', 'paymentReports', 'goals']) {
+  for (const key of [
+    'expenses',
+    'investmentMovements',
+    'investmentValuations',
+    'reserveMovements',
+    'contributions',
+    'settlements',
+    'paymentReports',
+    'investments',
+    'cards',
+    'events',
+    'incomeEntries',
+  ]) {
     next[key] = (data[key] || []).filter((item) => {
       if (remaining > 0 && (key === 'expenses' ? item.workspace : item.scope) === scope) {
         remaining -= 1;
@@ -63,6 +80,13 @@ export function purgeGroupHistoryBatch(data, groupId, limit = 300) {
       return true;
     }),
   );
+  next.goals = data.goals.filter((item) => {
+    if (remaining > 0 && item.scope === scope) {
+      remaining--;
+      return false;
+    }
+    return true;
+  });
   const done = groupHistoryCount(next, groupId) === 0;
   next.groups = data.groups
     .filter((item) => !done || item.id !== groupId)

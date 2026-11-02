@@ -3,7 +3,7 @@ import { CATEGORIES } from '../../shared/constants/categories.js';
 const normalize = (name) =>
   name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
-function owner(data, scope) {
+export function categoryOwner(data, scope) {
   if (scope?.startsWith('person:'))
     return data.people.find((person) => person.id === scope.slice(7));
   if (scope?.startsWith('group:')) return data.groups.find((group) => group.id === scope.slice(6));
@@ -32,7 +32,7 @@ export function categoryOptions(data, scope, additional = []) {
   return [
     ...new Set([
       ...CATEGORIES,
-      ...(owner(data, scope)?.categories || []),
+      ...(categoryOwner(data, scope)?.categories || []),
       ...(data.expenses || [])
         .filter((expense) => expense.workspace === scope)
         .map((expense) => expense.category),
@@ -45,7 +45,7 @@ export function categoryOptions(data, scope, additional = []) {
 }
 
 export function addExpenseCategory(data, scope, input) {
-  const target = owner(data, scope);
+  const target = categoryOwner(data, scope);
   if (!target || target.removed || target.deleted)
     throw new Error('Selecione um espaço financeiro ativo para cadastrar categorias.');
   const name = typeof input === 'string' ? input.trim().replace(/\s+/g, ' ') : '';
@@ -57,6 +57,40 @@ export function addExpenseCategory(data, scope, input) {
     ...data,
     [key]: data[key].map((item) =>
       item.id === target.id ? { ...item, categories: [...(item.categories || []), name] } : item,
+    ),
+  };
+}
+
+export function extraCategoryOptions(data, scope, kind) {
+  const defaults =
+    kind === 'incomeCategories'
+      ? ['Salário', 'Renda extra', 'Dividendos', 'Outras receitas']
+      : ['Renda fixa', 'Ações', 'Fundos', 'Previdência', 'Outros investimentos'];
+  const records = kind === 'incomeCategories' ? data.incomeEntries || [] : data.investments || [];
+  return [
+    ...new Set([
+      ...defaults,
+      ...(categoryOwner(data, scope)?.[kind] || []),
+      ...records
+        .filter((r) => r.scope === scope)
+        .map((r) => (kind === 'incomeCategories' ? r.category : r.type)),
+    ]),
+  ];
+}
+export function addExtraCategory(data, scope, kind, input) {
+  if (!['incomeCategories', 'investmentTypes'].includes(kind))
+    throw new Error('Tipo de categoria inválido.');
+  const target = categoryOwner(data, scope),
+    name = input.trim().replace(/\s+/g, ' ');
+  if (!target || target.deleted || target.removed) throw new Error('Espaço indisponível.');
+  validateCategoryNames([name]);
+  if (extraCategoryOptions(data, scope, kind).some((n) => normalize(n) === normalize(name)))
+    throw new Error('Categoria já cadastrada.');
+  const section = scope.startsWith('group:') ? 'groups' : 'people';
+  return {
+    ...data,
+    [section]: data[section].map((o) =>
+      o.id === target.id ? { ...o, [kind]: [...(o[kind] || []), name] } : o,
     ),
   };
 }

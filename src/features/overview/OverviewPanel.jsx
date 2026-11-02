@@ -109,7 +109,7 @@ export function OverviewPanel({
               </div>
               <Progress
                 amount={stats.savingsThisMonth}
-                target={plan.savingTarget || 0}
+                target={stats.savingTarget ?? plan.savingTarget ?? 0}
                 label="Meta de economia"
               />
             </section>

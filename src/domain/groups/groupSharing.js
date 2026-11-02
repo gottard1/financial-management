@@ -2,6 +2,21 @@ import { splitExpense } from '../expenses/expenseCalculations.js';
 import { activeGroupMembers } from './groupMembers.js';
 import { calculateWorkspace } from '../budget/workspaceCalculations.js';
 import { publicGroupStats } from './groupOverview.js';
+import { sharedExtensionKinds, publicExtensionRecord } from './sharedGroupEditing.js';
+import { expenseMonth, monthlyIncomes } from '../finance/extendedFinance.js';
+
+const publicStrategy = (s) => ({
+  targetType: s.targetType,
+  targetAmount: s.targetAmount,
+  targetPercent: s.targetPercent,
+  distribution: s.distribution.map((d) => ({
+    id: d.id,
+    name: d.name,
+    percent: d.percent,
+    fixedAmount: d.fixedAmount,
+    ...(d.goalId ? { goalId: d.goalId } : {}),
+  })),
+});
 
 export function normalizeInviteEmail(value) {
   const email = value.trim().toLowerCase();
@@ -23,6 +38,15 @@ export function projectSharedGroup(data, groupId) {
     id: group.id,
     name: group.name,
     categories: [...(group.categories || [])],
+    investmentTypes: [...(group.investmentTypes || [])],
+    ...Object.fromEntries(
+      sharedExtensionKinds.map((kind) => [
+        kind,
+        (data[kind] || [])
+          .filter((item) => item.scope === `group:${groupId}`)
+          .map((item) => publicExtensionRecord(kind, item)),
+      ]),
+    ),
     adminPersonId: group.adminPersonId || null,
     activeMemberIds: activeGroupMembers(group),
     emptyOverview: {
@@ -46,7 +70,12 @@ export function projectSharedGroup(data, groupId) {
             .map((key) => key.split('|')[1]),
           ...data.expenses
             .filter((item) => item.workspace === `group:${groupId}`)
-            .map((item) => item.date.slice(0, 7)),
+            .map(expenseMonth),
+          ...sharedExtensionKinds.flatMap((kind) =>
+            (data[kind] || [])
+              .filter((item) => item.scope === `group:${groupId}` && item.date)
+              .map((item) => item.date.slice(0, 7)),
+          ),
           ...(data.contributions || [])
             .filter((item) => item.scope === `group:${groupId}`)
             .map((item) => item.date.slice(0, 7)),
@@ -74,6 +103,21 @@ export function projectSharedGroup(data, groupId) {
               spendingLimit: data.plans?.[`group:${groupId}|${month}`]?.spendingLimit || 0,
               savingTarget: data.plans?.[`group:${groupId}|${month}`]?.savingTarget || 0,
               categories: data.plans?.[`group:${groupId}|${month}`]?.categories || {},
+              ...(data.plans?.[`group:${groupId}|${month}`]?.savingsStrategy
+                ? {
+                    savingsStrategy: publicStrategy(
+                      data.plans[`group:${groupId}|${month}`].savingsStrategy,
+                    ),
+                  }
+                : {}),
+              ...(data.plans?.[`group:${groupId}|${month}`]?.savingsStrategyHistory
+                ? {
+                    savingsStrategyHistory:
+                      data.plans[`group:${groupId}|${month}`].savingsStrategyHistory.map(
+                        publicStrategy,
+                      ),
+                  }
+                : {}),
             },
           },
         ]),
@@ -96,10 +140,35 @@ export function projectSharedGroup(data, groupId) {
         split: expense.split,
         percentages: { ...(expense.percentages || {}) },
         ...(expense.originId ? { originId: expense.originId } : {}),
+        ...Object.fromEntries(
+          [
+            'essential',
+            'companion',
+            'eventId',
+            'cardId',
+            'purchaseDate',
+            'invoiceMonth',
+            'purchaseTotal',
+          ]
+            .filter((key) => Object.hasOwn(expense, key))
+            .map((key) => [key, expense[key]]),
+        ),
+        ...(expense.cardTerms
+          ? {
+              cardTerms: {
+                id: expense.cardTerms.id,
+                closingDay: expense.cardTerms.closingDay,
+                dueDay: expense.cardTerms.dueDay,
+              },
+            }
+          : {}),
+        ...(expense.recurrence
+          ? { recurrence: { total: expense.recurrence.total, current: expense.recurrence.current } }
+          : {}),
         ...(expense.fixed
           ? { fixed: true, fixedAmountType: expense.fixedAmountType || 'fixed' }
           : {}),
-        shares: splitExpense(expense, data.months[expense.date.slice(0, 7)] || {}, group.memberIds),
+        shares: splitExpense(expense, monthlyIncomes(data, expenseMonth(expense)), group.memberIds),
         ...(expense.installments ? { installments: { ...expense.installments } } : {}),
       })),
     goals: (data.goals || [])
@@ -113,13 +182,14 @@ export function projectSharedGroup(data, groupId) {
       })),
     contributions: (data.contributions || [])
       .filter((item) => item.scope === `group:${groupId}`)
-      .map(({ id, scope, amount, date, goalId, note }) => ({
+      .map(({ id, scope, amount, date, goalId, note, destinationId }) => ({
         id,
         scope,
         amount,
         date,
         ...(goalId ? { goalId } : {}),
         ...(note ? { note } : {}),
+        ...(destinationId ? { destinationId } : {}),
       })),
     settlements: (data.settlements || [])
       .filter((item) => item.scope === `group:${group.id}`)

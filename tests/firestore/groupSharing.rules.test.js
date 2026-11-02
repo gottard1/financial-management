@@ -46,6 +46,71 @@ const groupId = 'admin_home';
 const inviteId = `${groupId}_person-b`;
 const memberId = `member_${groupId}`;
 test(
+  'new private finance collections synchronize only for their owner and retain exact data',
+  { skip: !enabled },
+  async () => {
+    const owner = context('extended-owner'),
+      outsider = context('extended-outsider');
+    const data = migrateData(null),
+      scope = 'person:person-0';
+    data.cards = [{ id: 'c', scope, name: 'Cartão', closingDay: 10, dueDay: 20 }];
+    data.events = [{ id: 'e', scope, name: 'Viagem' }];
+    data.incomeEntries = [
+      {
+        id: 'i',
+        scope,
+        date: '2026-11-01',
+        description: 'Extra',
+        category: 'Renda extra',
+        amount: 10000,
+        includedInProfile: false,
+      },
+    ];
+    data.reserveMovements = [
+      { id: 'r', scope, date: '2026-11-01', kind: 'opening', amount: 10000 },
+    ];
+    data.investments = [
+      { id: 'a', scope, name: 'Ativo', type: 'Renda fixa', institution: 'Banco' },
+    ];
+    data.investmentMovements = [
+      {
+        id: 'm',
+        scope,
+        date: '2026-11-02',
+        investmentId: 'a',
+        kind: 'application',
+        funding: 'reserve',
+        amount: 4000,
+      },
+    ];
+    data.investmentValuations = [
+      { id: 'v', scope, date: '2026-11-03', investmentId: 'a', amount: 4500 },
+    ];
+    const store = createFinanceCloudStore(owner, 'extended-owner');
+    await assertSucceeds(store.save(data, null));
+    const docs = await getDocs(collection(owner, 'users', 'extended-owner', 'finance'));
+    assert.deepEqual(
+      decodeFinance(docs.docs.map((d) => ({ ...d.data(), id: d.id }))).data,
+      migrateData(data),
+    );
+    for (const kind of [
+      'cards',
+      'events',
+      'incomeEntries',
+      'reserveMovements',
+      'investments',
+      'investmentMovements',
+      'investmentValuations',
+    ]) {
+      const id = docs.docs.find((d) => d.data().kind === kind).id;
+      await assertFails(getDoc(doc(outsider, 'users', 'extended-owner', 'finance', id)));
+      await assertFails(
+        updateDoc(doc(outsider, 'users', 'extended-owner', 'finance', id), { payload: '{}' }),
+      );
+    }
+  },
+);
+test(
   'shared edits persist atomically through the server, reject concurrent revisions, and never grant private writes or deletion',
   { skip: !enabled },
   async () => {
@@ -955,13 +1020,14 @@ test(
       await assertFails(getDoc(ref(outsider)));
       await assertFails(updateDoc(ref(payer), { status: 'confirmed' }));
       await assertFails(updateDoc(ref(owner), { status: 'confirmed' }));
-      await assertFails(
+      await assert.rejects(
         writeSharedSettlement(owner, 'payment-owner', id, {
           month: '2026-11',
           id: 'bypass',
           date: '2026-11-02',
           transfer: { from: 'b', to: 'a', amount: 1200 },
         }),
+        /aguarda confirmação/,
       );
       await execute('payment-owner', { action: 'confirm-payment', reportId: report.id });
       await assertFails(

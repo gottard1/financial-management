@@ -1,4 +1,5 @@
 import { migrateData } from './workspaceCalculations.js';
+import { extensionArrays } from '../finance/extendedFinance.js';
 
 export function stableJson(data) {
   return JSON.stringify(data, (_, value) =>
@@ -16,6 +17,7 @@ const arrays = [
   'contributions',
   'settlements',
   'paymentReports',
+  ...extensionArrays,
 ];
 export const financeRecordId = (kind, key) => `${kind}:${encodeURIComponent(key)}`;
 
@@ -89,7 +91,9 @@ export function decodeFinance(records) {
   for (const kind of arrays) {
     const ids =
       state.orders[kind] ??
-      (kind === 'paymentReports' && sections[kind].size === 0 ? [] : undefined);
+      ((kind === 'paymentReports' || extensionArrays.includes(kind)) && sections[kind].size === 0
+        ? []
+        : undefined);
     if (
       !Array.isArray(ids) ||
       ids.length !== sections[kind].size ||

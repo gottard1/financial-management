@@ -1,6 +1,7 @@
 import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { categoryOptions } from '../../domain/expenses/expenseCategories.js';
+import { invoiceDates, installmentAmount } from '../../domain/finance/extendedFinance.js';
 
 function equalPercentages(ids) {
   const base = ids.length ? Math.floor(10000 / ids.length) : 0;
@@ -21,20 +22,34 @@ export function ExpenseDialog({
   error,
 }) {
   const shared = draft.workspace.startsWith('group:');
+  let invoicePreview = null;
+  try {
+    if (draft.cardId && draft.purchaseDate && (draft.recalculateInvoice || !draft.cardTerms))
+      invoicePreview = invoiceDates(
+        draft.purchaseDate,
+        (data.cards || []).find((c) => c.id === draft.cardId),
+      );
+  } catch {}
   const completePreview =
     preview && draft.participants.every((id) => Number.isSafeInteger(preview[id]));
   const nameOf = (id) => data.people.find((person) => person.id === id)?.name || 'Pessoa';
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   function setRecurring(enabled) {
     setDraft((current) => {
-      const { installments, ...rest } = current;
+      const { installments, recurrence, purchaseTotal, amountMode, generateFuture, ...rest } =
+        current;
       return enabled ? { ...current, fixed: true } : { ...rest, fixed: false };
     });
   }
   function setDuration(value) {
     setDraft((current) => {
-      const { installments, ...rest } = current;
-      return value === 'limited' ? { ...current, installments: { total: 6, current: 1 } } : rest;
+      const { installments, recurrence, purchaseTotal, amountMode, generateFuture, ...rest } =
+        current;
+      return value === 'limited'
+        ? { ...rest, installments: { total: 6, current: 1 } }
+        : value === 'recurrence'
+          ? { ...rest, recurrence: { total: 12, current: 1 } }
+          : rest;
     });
   }
   function changeSplit(value) {
@@ -97,7 +112,9 @@ export function ExpenseDialog({
               />
             </label>
             <label className="field">
-              {draft.installments ? 'Valor desta parcela (R$)' : 'Valor total (R$)'}
+              {draft.installments && draft.amountMode !== 'total'
+                ? 'Valor desta parcela (R$)'
+                : 'Valor total (R$)'}
               <input
                 required
                 inputMode="decimal"
@@ -119,9 +136,100 @@ export function ExpenseDialog({
               <input
                 type="date"
                 required
-                value={draft.date}
+                readOnly={Boolean(draft.cardId)}
+                value={invoicePreview?.date || draft.date}
                 onChange={(e) => update('date', e.target.value)}
               />
+            </label>
+            <label className="field">
+              Cartão / fatura (opcional)
+              <select
+                value={draft.cardId || ''}
+                onChange={(e) =>
+                  setDraft((c) => ({
+                    ...c,
+                    cardId: e.target.value,
+                    recalculateInvoice: true,
+                    purchaseDate: c.purchaseDate || c.date,
+                  }))
+                }
+              >
+                <option value="">Sem cartão · mês pelo vencimento</option>
+                {(data.cards || [])
+                  .filter((c) => c.scope === draft.workspace)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+              <small>Cadastre cartões na área Faturas e eventos.</small>
+            </label>
+            <label className="field">
+              Data da compra (opcional sem cartão)
+              <input
+                type="date"
+                required={Boolean(draft.cardId)}
+                value={draft.purchaseDate || ''}
+                onChange={(e) =>
+                  setDraft((c) => ({
+                    ...c,
+                    purchaseDate: e.target.value,
+                    recalculateInvoice: true,
+                  }))
+                }
+              />
+              {draft.cardId && (
+                <small>
+                  Competência da fatura:{' '}
+                  {invoicePreview?.invoiceMonth || draft.invoiceMonth || 'calculada ao salvar'}.
+                  Após o fechamento, passa à seguinte.
+                </small>
+              )}
+            </label>
+            <label className="field">
+              Essencial?
+              <select
+                value={draft.essential === undefined ? '' : String(draft.essential)}
+                onChange={(e) =>
+                  setDraft((c) => {
+                    const n = { ...c };
+                    if (e.target.value === '') delete n.essential;
+                    else n.essential = e.target.value === 'true';
+                    return n;
+                  })
+                }
+              >
+                <option value="">Não classificado</option>
+                <option value="true">Sim</option>
+                <option value="false">Não</option>
+              </select>
+            </label>
+            <label className="field">
+              Evento (opcional)
+              <select
+                value={draft.eventId || ''}
+                onChange={(e) => update('eventId', e.target.value)}
+              >
+                <option value="">Sem evento</option>
+                {(data.events || [])
+                  .filter((v) => v.scope === draft.workspace)
+                  .map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
+              Com quem (classificação opcional)
+              <input
+                maxLength={120}
+                value={draft.companion || ''}
+                onChange={(e) => update('companion', e.target.value)}
+                placeholder="Ex.: Família, amigos"
+              />
+              <small>Não altera participantes, pagador ou rateio.</small>
             </label>
           </div>
           <label className="checkbox-label">
@@ -137,15 +245,49 @@ export function ExpenseDialog({
               <label className="field">
                 Por quanto tempo esta conta se repete?
                 <select
-                  value={draft.installments ? 'limited' : 'unlimited'}
+                  value={
+                    draft.installments ? 'limited' : draft.recurrence ? 'recurrence' : 'unlimited'
+                  }
                   onChange={(event) => setDuration(event.target.value)}
                 >
                   <option value="unlimited">Sem prazo definido · conta mensal</option>
                   <option value="limited">Número de parcelas · compra ou financiamento</option>
+                  <option value="recurrence">
+                    Quantidade de meses · valor integral a cada mês
+                  </option>
                 </select>
               </label>
               {draft.installments && (
                 <>
+                  <label className="field">
+                    Como informar o valor?
+                    <select
+                      value={draft.amountMode || 'installment'}
+                      onChange={(e) =>
+                        setDraft((c) => {
+                          const next = { ...c, amountMode: e.target.value };
+                          if (c.purchaseTotal !== undefined) {
+                            next.amount = (
+                              e.target.value === 'total'
+                                ? c.purchaseTotal / 100
+                                : installmentAmount(
+                                    c.purchaseTotal,
+                                    Number(c.installments.total),
+                                    Number(c.installments.current),
+                                  ) / 100
+                            ).toFixed(2);
+                            if (e.target.value === 'installment') delete next.purchaseTotal;
+                          }
+                          return next;
+                        })
+                      }
+                    >
+                      <option value="installment">Valor de uma parcela · opção atual</option>
+                      <option value="total">
+                        Valor total da compra · dividir com ajuste de centavos
+                      </option>
+                    </select>
+                  </label>
                   <div className="form-grid">
                     <label className="field">
                       Quantidade de parcelas
@@ -184,12 +326,52 @@ export function ExpenseDialog({
                     </label>
                   </div>
                   <p className="hint">
-                    Informe acima o valor de uma parcela, não o total da compra. Ex.: um
-                    financiamento de 420 parcelas de R$ 978 registra R$ 978 por mês. Ao trazer o mês
-                    seguinte, a numeração avança e encerra na última parcela. Os meses futuros não
-                    são lançados automaticamente.
+                    O modo de uma parcela mantém o valor informado em cada mês. No modo total, os
+                    centavos restantes são distribuídos nas primeiras parcelas para conservar o
+                    valor da compra.
                   </p>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.generateFuture)}
+                      onChange={(e) => update('generateFuture', e.target.checked)}
+                    />
+                    Gerar parcelas futuras como pendentes (até 600)
+                  </label>
                 </>
+              )}
+              {draft.recurrence && (
+                <div className="form-grid">
+                  <label className="field">
+                    Quantidade de meses
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={draft.recurrence.total}
+                      onChange={(e) =>
+                        update('recurrence', { ...draft.recurrence, total: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    Mês atual da recorrência
+                    <input
+                      type="number"
+                      min="1"
+                      max={draft.recurrence.total}
+                      required
+                      value={draft.recurrence.current}
+                      onChange={(e) =>
+                        update('recurrence', { ...draft.recurrence, current: e.target.value })
+                      }
+                    />
+                  </label>
+                  <p className="hint">
+                    O valor integral se repete, inclusive na virada do ano. Valores variáveis
+                    continuam exigindo revisão.
+                  </p>
+                </div>
               )}
               <label className="field">
                 Como o valor se repete?
