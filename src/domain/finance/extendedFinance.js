@@ -43,19 +43,44 @@ export function dateInMonth(month, day) {
   last.setUTCDate(0);
   return `${month}-${String(Math.min(day, last.getUTCDate())).padStart(2, '0')}`;
 }
-export function invoiceDates(purchaseDate, card) {
-  validDate(purchaseDate);
+export function validateCardTerms(card) {
+  if (!card || typeof card !== 'object') throw new Error('Selecione um cartão válido.');
   integer(card.closingDay, 'Fechamento', 1);
   integer(card.dueDay, 'Vencimento', 1);
   if (card.closingDay > 31 || card.dueDay > 31) throw new Error('Use dias entre 1 e 31.');
+  if (card.dueMonthMode !== undefined && !['auto', 'same', 'next'].includes(card.dueMonthMode))
+    throw new Error('Mês do vencimento inválido.');
+  if (card.dueMonthMode === 'same' && card.dueDay < card.closingDay)
+    throw new Error(
+      'O vencimento não pode ser anterior ao fechamento. Selecione mês seguinte ou automático.',
+    );
+}
+export function cardInvoicePeriod(invoiceMonth, card) {
+  validateCardTerms(card);
+  const offset =
+    card.dueMonthMode === 'next'
+      ? 1
+      : card.dueMonthMode === 'same'
+        ? 0
+        : card.dueDay <= card.closingDay
+          ? 1
+          : 0;
+  return {
+    invoiceMonth,
+    closingDate: dateInMonth(invoiceMonth, card.closingDay),
+    date: dateInMonth(addMonths(invoiceMonth, offset), card.dueDay),
+  };
+}
+export function invoiceDates(purchaseDate, card) {
+  validDate(purchaseDate);
+  validateCardTerms(card);
   const purchaseMonth = purchaseDate.slice(0, 7);
   const invoiceMonth = addMonths(
     purchaseMonth,
     purchaseDate > dateInMonth(purchaseMonth, card.closingDay) ? 1 : 0,
   );
   // Competência identifica o mês do fechamento; vencimento pode ser no mês seguinte.
-  const dueMonth = addMonths(invoiceMonth, card.dueDay <= card.closingDay ? 1 : 0);
-  return { invoiceMonth, date: dateInMonth(dueMonth, card.dueDay) };
+  return { invoiceMonth, date: cardInvoicePeriod(invoiceMonth, card).date };
 }
 export function expenseMonth(expense) {
   return expense.cardId && expense.invoiceMonth ? expense.invoiceMonth : expense.date.slice(0, 7);
@@ -94,7 +119,12 @@ export function prepareExpense(draft, data, parse) {
     if (!card) throw new Error('Selecione um cartão deste espaço.');
     // Snapshot terms: changing a card never recalculates recorded invoices.
     if (!item.cardTerms || item.cardTerms.id !== card.id || draft.recalculateInvoice) {
-      item.cardTerms = { id: card.id, closingDay: card.closingDay, dueDay: card.dueDay };
+      item.cardTerms = {
+        id: card.id,
+        closingDay: card.closingDay,
+        dueDay: card.dueDay,
+        ...(card.dueMonthMode !== undefined ? { dueMonthMode: card.dueMonthMode } : {}),
+      };
       Object.assign(item, invoiceDates(item.purchaseDate, item.cardTerms));
     }
   } else {
@@ -392,9 +422,7 @@ export function validateExtensions(data, scopeMembers) {
         integer(item.amount, 'Valor', kind === 'investmentValuations' ? 0 : 1);
       }
       if (kind === 'cards') {
-        integer(item.closingDay, 'Fechamento', 1);
-        integer(item.dueDay, 'Vencimento', 1);
-        if (item.closingDay > 31 || item.dueDay > 31) throw new Error('Dia inválido.');
+        validateCardTerms(item);
       }
       if (kind === 'incomeEntries') {
         if (!item.scope.startsWith('person:'))

@@ -39,7 +39,7 @@ const fields = {
     'savingsStrategy',
     'savingsStrategyHistory',
   ],
-  cards: ['name', 'closingDay', 'dueDay'],
+  cards: ['name', 'closingDay', 'dueDay', 'dueMonthMode'],
   events: ['name'],
   reserveMovements: ['kind', 'amount', 'date', 'goalId', 'toGoalId', 'note', 'destinationId'],
   investments: ['name', 'type', 'institution', 'identifier', 'goalId'],

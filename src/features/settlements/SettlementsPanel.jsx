@@ -1,3 +1,4 @@
+import { MoneyInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { validateNewSettlement } from '../../domain/settlements/settlementCalculations.js';
@@ -245,7 +246,7 @@ export function SettlementsPanel({
     .sort((a, b) => b.date.localeCompare(a.date));
   const suggestions = stats.transfers ?? [];
   return (
-    <div className="settlements-panel">
+    <div className="settlements-panel content-stack">
       <section className="panel">
         <p className="eyebrow">ACERTOS ENTRE INTEGRANTES</p>
         <h2>Repasses de {group.name}</h2>
@@ -318,7 +319,7 @@ export function SettlementsPanel({
             </label>
             <label className="field">
               Valor recebido (R$)
-              <input
+              <MoneyInput
                 required
                 name="settlementAmount"
                 inputMode="decimal"

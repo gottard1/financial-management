@@ -42,6 +42,33 @@ function monthParts(month) {
   return [Number(month.slice(0, 4)), Number(month.slice(5))];
 }
 
+export const requiresRecurringAmount = (expense) =>
+  expense.fixedAmountType === 'variable' && expense.purchaseTotal === undefined;
+
+export function recurringReviewEntries(items) {
+  return Object.fromEntries(
+    items.map((item) => [
+      item.id,
+      {
+        selected: !item.unavailableReason,
+        amount: requiresRecurringAmount(item)
+          ? ''
+          : (
+              (item.purchaseTotal !== undefined
+                ? installmentAmount(
+                    item.purchaseTotal,
+                    item.installments.total,
+                    item.installments.current + 1,
+                  )
+                : item.amount) / 100
+            )
+              .toFixed(2)
+              .replace('.', ','),
+      },
+    ]),
+  );
+}
+
 export function recurringCandidates(expenses, scope, month) {
   const [year, number] = monthParts(month);
   const previous = `${number === 1 ? year - 1 : year}-${String(number === 1 ? 12 : number - 1).padStart(2, '0')}`;

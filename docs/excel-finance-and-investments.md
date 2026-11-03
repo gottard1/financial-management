@@ -33,11 +33,23 @@ O comportamento anterior foi confirmado no código: mês pelo vencimento, valor 
 
 Sem cartão, `date` continua sendo o vencimento e determina o mês. Com cartão, `purchaseDate` é a data original, `invoiceMonth` é o mês do fechamento e `date` é o vencimento. O resumo usa a competência da fatura apenas para lançamentos com cartão.
 
-Fechamento e vencimento aceitam dias de 1 a 31. Datas inexistentes são limitadas ao último dia do mês. Se o dia de vencimento é anterior ou igual ao fechamento, o vencimento ocorre no mês seguinte. Cada lançamento guarda `cardTerms`: editar o cadastro do cartão não altera faturas já registradas. Alterar compra ou cartão no formulário recalcula os termos explicitamente. Parcelas seguintes preservam a data original de compra e avançam competência e vencimento.
+Fechamento e vencimento aceitam dias de 1 a 31. Datas inexistentes são limitadas ao último dia do mês. O campo opcional `dueMonthMode` escolhe **Automático**, **Mesmo mês do fechamento** ou **Mês seguinte ao fechamento**. No automático (também usado quando o campo não existe nos dados antigos), um dia de vencimento anterior ou igual ao fechamento coloca o vencimento no mês seguinte. O modo explícito de mesmo mês não permite vencimento anterior ao fechamento. Exemplo: fechamento dia 31 em novembro resulta em **30/11**, com vencimento dia 6 no mês seguinte em **06/12**; em dezembro, o vencimento avança para janeiro do ano seguinte. O cadastro exibe as duas datas em uma prévia baseada no mês selecionado.
+
+Cada lançamento guarda `cardTerms`, incluindo o modo de vencimento escolhido quando aplicável: editar o cadastro do cartão não altera faturas já registradas. Alterar compra ou cartão no formulário recalcula os termos explicitamente. Parcelas seguintes preservam a data original de compra e avançam competência e vencimento. Cadastro, backup, sincronização e projeção dos grupos preservam esse campo opcional sem alterar registros anteriores.
 
 O padrão continua **valor de uma parcela**, sem gerar o futuro. No modo **total da compra**, `purchaseTotal` guarda o total e o resto em centavos vai para as primeiras parcelas. Exemplo: R$100/3 = R$33,34 + R$33,33 + R$33,33. A revisão não modifica parcelas com total conservado; pode-se mudar explicitamente para o modo unitário ao editar. Cada ocorrência é independente: editar uma não reescreve parcelas já geradas.
 
 A geração cria pendências identificadas pela mesma origem; a revisão das recorrentes e a projeção consultam as origens/competências existentes. Gerar novamente não duplica ocorrências. Valores variáveis ainda exigem revisão. Recorrências por quantidade de meses repetem o valor integral e têm contagem própria, separada das parcelas. Há limite operacional de 600 parcelas por geração e projeção de até 600 meses adicionais por origem; grupos também respeitam o limite transacional do servidor de 450 registros alterados. Não há geração automática ao abrir um mês.
+
+Na revisão de recorrências variáveis, o campo de valor sempre começa vazio em cada novo mês. O valor anterior não é exibido como sugestão nessa revisão e nunca serve como alternativa para um campo vazio. O valor atual é obrigatório apenas nas contas selecionadas; valores fixos continuam preenchidos e parcelas calculadas pelo total mantêm seus centavos. O histórico anterior permanece disponível nos respectivos meses.
+
+## Todas as despesas
+
+No espaço individual, a aba **Todas as despesas** reúne gastos pessoais e contas dos grupos administrados ou compartilhados com a conta autenticada. A lista distingue **Minha parte** de **Total da conta**, exibe origem e situação e oferece filtros por grupo, categoria e essencial. O total soma somente a responsabilidade pessoal, sem repetir a conta inteira; pagamentos feitos em nome de outros participantes aparecem separadamente. A lista anterior de despesas pessoais continua disponível.
+
+Essa visão é somente derivada: não duplica lançamentos nem altera orçamento, rendas, rateio ou histórico. Os grupos convidados usam a identidade do vínculo e as cotas da projeção autorizada, sem consultar salários dos demais integrantes. Projeções duplicadas de grupos administrados são ignoradas; ausência de uma cota necessária sinaliza total parcial. **Abrir origem** leva ao espaço em que o registro já é gerenciado. A competência segue a fatura para cartões e o vencimento para registros sem cartão.
+
+Novas despesas de grupo começam com **Partes iguais**, tanto para administrador quanto participante. O formulário continua permitindo divisão proporcional à renda e percentuais personalizados. Edição e cópia de recorrências preservam o rateio já registrado.
 
 ## Receitas e fluxo
 

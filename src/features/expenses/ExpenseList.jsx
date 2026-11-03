@@ -140,23 +140,15 @@ export function ExpenseList({
           correspondente; sua parte em todos os grupos também aparece no seu resumo mensal.
         </p>
       )}
-      <label className="field expense-filter">
-        Mostrar
-        <select value={filter} onChange={(event) => setFilter(event.target.value)}>
-          <option value="all">Todas as despesas</option>
-          <option value="paid">Pagas</option>
-          <option value="pending">Pendentes</option>
-          <option value="essential">Essenciais</option>
-        </select>
-      </label>
-      <div className="form-grid">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={essential}
-            onChange={(e) => setEssential(e.target.checked)}
-          />
-          Somente essenciais (combina com os outros filtros)
+      <div className="expense-filters">
+        <label className="field expense-filter">
+          Mostrar
+          <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="all">Todas as despesas</option>
+            <option value="paid">Pagas</option>
+            <option value="pending">Pendentes</option>
+            <option value="essential">Essenciais</option>
+          </select>
         </label>
         <label className="field">
           Com quem
@@ -180,8 +172,16 @@ export function ExpenseList({
               ))}
           </select>
         </label>
+        <label className="checkbox-label expense-essential-filter">
+          <input
+            type="checkbox"
+            checked={essential}
+            onChange={(e) => setEssential(e.target.checked)}
+          />
+          Somente essenciais (combina com os outros filtros)
+        </label>
       </div>
-      <p className="muted">
+      <p className="muted expense-filter-total">
         Total no filtro: {money(items.reduce((sum, item) => sum + item.expense.amount, 0))}
       </p>
       {items.length === 0 ? (

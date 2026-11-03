@@ -1,3 +1,4 @@
+import { PhoneInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useState } from 'react';
 import { IncomePanel } from '../income/IncomePanel.jsx';
 import { profilePerson, saveProfile } from '../../domain/groups/profile.js';
@@ -82,7 +83,7 @@ function PersonalDetails({ person, user, setData, notify }) {
           </label>
           <label className="field">
             Telefone (opcional)
-            <input
+            <PhoneInput
               type="tel"
               autoComplete="tel"
               maxLength={30}

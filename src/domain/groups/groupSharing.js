@@ -159,6 +159,9 @@ export function projectSharedGroup(data, groupId) {
                 id: expense.cardTerms.id,
                 closingDay: expense.cardTerms.closingDay,
                 dueDay: expense.cardTerms.dueDay,
+                ...(expense.cardTerms.dueMonthMode !== undefined
+                  ? { dueMonthMode: expense.cardTerms.dueMonthMode }
+                  : {}),
               },
             }
           : {}),

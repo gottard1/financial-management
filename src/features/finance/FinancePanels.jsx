@@ -1,3 +1,4 @@
+import { MoneyInput, PercentInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import {
@@ -8,6 +9,7 @@ import {
   assetSummary,
   reserveBalances,
   dateInMonth,
+  cardInvoicePeriod,
   expenseMonth,
   installmentCommitments,
   total,
@@ -72,10 +74,12 @@ function RecordsEditor({
   canDelete = true,
   describe,
   help,
+  preview,
 }) {
   const [editing, setEditing] = useState(null),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [previewValues, setPreviewValues] = useState(null);
   const rows = (data[kind] || []).filter((r) => r.scope === scope);
   async function save(event) {
     event.preventDefault();
@@ -101,6 +105,7 @@ function RecordsEditor({
         [kind]: [...(current[kind] || []).filter((r) => r.id !== record.id), record],
       }));
       setEditing(null);
+      setPreviewValues(null);
       form.reset();
       setError('');
       notify?.('Registro salvo.');
@@ -114,7 +119,15 @@ function RecordsEditor({
     <section className="panel finance-panel">
       <h2>{title}</h2>
       {help && <p className="muted">{help}</p>}
-      <form key={editing?.id || 'new'} onSubmit={save}>
+      <form
+        key={editing?.id || 'new'}
+        onSubmit={save}
+        onChange={
+          preview
+            ? (event) => setPreviewValues(Object.fromEntries(new FormData(event.currentTarget)))
+            : undefined
+        }
+      >
         <div className="form-grid">
           {fields.map((field) => {
             const v = editing?.[field.name] ?? field.initial ?? '';
@@ -144,6 +157,8 @@ function RecordsEditor({
                       );
                     })}
                   </select>
+                ) : field.type === 'money' ? (
+                  <MoneyInput {...props} defaultValue={amountText(v)} />
                 ) : (
                   field.type !== 'checkbox' && (
                     <input
@@ -161,6 +176,12 @@ function RecordsEditor({
             );
           })}
         </div>
+        {preview?.(
+          previewValues ||
+            Object.fromEntries(
+              fields.map((field) => [field.name, editing?.[field.name] ?? field.initial ?? '']),
+            ),
+        )}
         <div className="form-actions">
           <button className="button primary" disabled={busy}>
             {editing ? 'Salvar alteração' : 'Adicionar'}
@@ -171,6 +192,7 @@ function RecordsEditor({
               className="button secondary"
               onClick={() => {
                 setEditing(null);
+                setPreviewValues(null);
                 setError('');
               }}
             >
@@ -196,6 +218,7 @@ function RecordsEditor({
                 className="button secondary"
                 onClick={() => {
                   setEditing(r);
+                  setPreviewValues(null);
                   setError('');
                 }}
               >
@@ -231,6 +254,49 @@ function RecordsEditor({
         ))}
       </ul>
     </section>
+  );
+}
+
+const dateText = (date) => date.split('-').reverse().join('/');
+function CardInvoicePreview({ values, month }) {
+  let period,
+    error = '';
+  try {
+    period = cardInvoicePeriod(month, {
+      closingDay: Number(values.closingDay),
+      dueDay: Number(values.dueDay),
+      dueMonthMode: values.dueMonthMode || 'auto',
+    });
+  } catch (e) {
+    error = e.message;
+  }
+  return (
+    <div className="notice card-invoice-preview" role="status">
+      <div>
+        <strong>
+          Prévia da fatura · {values.name || 'Novo cartão'} · mês de fechamento{' '}
+          {month.split('-').reverse().join('/')}
+        </strong>
+        {period ? (
+          <>
+            <p>
+              Fechamento em <strong>{dateText(period.closingDate)}</strong> · vencimento em{' '}
+              <strong>{dateText(period.date)}</strong>.
+            </p>
+            {Number(values.closingDay) > Number(period.closingDate.slice(-2)) && (
+              <p>
+                Este mês não tem dia {values.closingDay}. O fechamento será no último dia do mês.
+              </p>
+            )}
+            <small>
+              No dia do fechamento a compra ainda entra nesta fatura. Depois dele, entra na próxima.
+            </small>
+          </>
+        ) : (
+          <p>{error}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -275,9 +341,23 @@ export function FinanceSetupPanel(props) {
             initial: 20,
             required: true,
           },
+          {
+            name: 'dueMonthMode',
+            label: 'Mês do vencimento',
+            initial: 'auto',
+            options: [
+              ['auto', 'Automático · manter a regra atual'],
+              ['same', 'Mesmo mês do fechamento'],
+              ['next', 'Mês seguinte ao fechamento'],
+            ],
+          },
         ]}
-        describe={(r) => `${r.name} · fecha dia ${r.closingDay} · vence dia ${r.dueDay}`}
-        help="No dia do fechamento a compra permanece na fatura atual; depois, vai para a seguinte. Se o dia de vencimento for anterior ou igual ao fechamento, o vencimento ocorre no mês seguinte. Dias inexistentes usam o último dia do mês. Alterar o cartão preserva as faturas já registradas."
+        preview={(values) => <CardInvoicePreview values={values} month={month} />}
+        describe={(r) => {
+          const period = cardInvoicePeriod(month, r);
+          return `${r.name} · fechamento ${dateText(period.closingDate)} · vencimento ${dateText(period.date)}`;
+        }}
+        help="Configure o fechamento e o vencimento separadamente. No modo automático, um vencimento com dia anterior ou igual ao fechamento fica no mês seguinte. Dias inexistentes usam o último dia do mês. A prévia abaixo usa o mês selecionado; alterar o cartão preserva as faturas já registradas."
       />
       <section className="panel finance-panel">
         <h2>Faturas de {month}</h2>
@@ -293,7 +373,7 @@ export function FinanceSetupPanel(props) {
           </select>
         </label>
         <strong className="amount">{money(total(invoices.map((e) => e.amount)))}</strong>
-        <ul className="compact-list">
+        <ul className="compact-list finance-record-list">
           {invoices.map((e) => (
             <li key={e.id}>
               {e.description} · compra {e.purchaseDate} · fatura {e.invoiceMonth} · vence {e.date}
@@ -795,7 +875,7 @@ export function SavingsStrategyPanel({ data, setData, scope, month, stats, notif
           </label>
           <label className="field">
             Percentual da meta (%)
-            <input
+            <PercentInput
               type="number"
               min="0"
               max="100"
@@ -808,7 +888,7 @@ export function SavingsStrategyPanel({ data, setData, scope, month, stats, notif
           </label>
           <label className="field">
             Meta em reais
-            <input
+            <MoneyInput
               inputMode="decimal"
               defaultValue={amountText(strategy.targetAmount)}
               name="targetAmount"
@@ -839,7 +919,7 @@ export function SavingsStrategyPanel({ data, setData, scope, month, stats, notif
               </label>
               <label className="field">
                 Percentual (%)
-                <input
+                <PercentInput
                   required
                   type="number"
                   min="0"
@@ -851,7 +931,7 @@ export function SavingsStrategyPanel({ data, setData, scope, month, stats, notif
               </label>
               <label className="field">
                 Aporte fixo programado (R$)
-                <input
+                <MoneyInput
                   inputMode="decimal"
                   defaultValue={amountText(d.fixedAmount)}
                   name={`fixed-${d.id}`}

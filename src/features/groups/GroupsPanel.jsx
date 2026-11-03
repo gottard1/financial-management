@@ -619,7 +619,9 @@ export function GroupsPanel({
                       }
                       key={id}
                     >
-                      {people.find((person) => person.id === id)?.name || 'Pessoa cadastrada'}
+                      <span className="group-participant-name">
+                        {people.find((person) => person.id === id)?.name || 'Pessoa cadastrada'}
+                      </span>
                       {group.removedMemberIds?.includes(id) ? (
                         <small>Removido · histórico mantido</small>
                       ) : (

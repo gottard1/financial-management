@@ -53,7 +53,9 @@ test(
       outsider = context('extended-outsider');
     const data = migrateData(null),
       scope = 'person:person-0';
-    data.cards = [{ id: 'c', scope, name: 'Cartão', closingDay: 10, dueDay: 20 }];
+    data.cards = [
+      { id: 'c', scope, name: 'Cartão', closingDay: 31, dueDay: 6, dueMonthMode: 'next' },
+    ];
     data.events = [{ id: 'e', scope, name: 'Viagem' }];
     data.incomeEntries = [
       {

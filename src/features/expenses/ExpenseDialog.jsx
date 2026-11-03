@@ -1,7 +1,12 @@
+import { MoneyInput, PercentInput } from '../../components/ui/FormattedInput.jsx';
 import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { categoryOptions } from '../../domain/expenses/expenseCategories.js';
-import { invoiceDates, installmentAmount } from '../../domain/finance/extendedFinance.js';
+import {
+  invoiceDates,
+  installmentAmount,
+  cardInvoicePeriod,
+} from '../../domain/finance/extendedFinance.js';
 
 function equalPercentages(ids) {
   const base = ids.length ? Math.floor(10000 / ids.length) : 0;
@@ -23,12 +28,20 @@ export function ExpenseDialog({
 }) {
   const shared = draft.workspace.startsWith('group:');
   let invoicePreview = null;
+  let invoicePeriod = null;
   try {
     if (draft.cardId && draft.purchaseDate && (draft.recalculateInvoice || !draft.cardTerms))
       invoicePreview = invoiceDates(
         draft.purchaseDate,
         (data.cards || []).find((c) => c.id === draft.cardId),
       );
+    const invoiceMonth = invoicePreview?.invoiceMonth || draft.invoiceMonth;
+    const terms =
+      draft.recalculateInvoice || !draft.cardTerms
+        ? (data.cards || []).find((c) => c.id === draft.cardId)
+        : draft.cardTerms;
+    if (draft.cardId && invoiceMonth && terms)
+      invoicePeriod = cardInvoicePeriod(invoiceMonth, terms);
   } catch {}
   const completePreview =
     preview && draft.participants.every((id) => Number.isSafeInteger(preview[id]));
@@ -115,7 +128,7 @@ export function ExpenseDialog({
               {draft.installments && draft.amountMode !== 'total'
                 ? 'Valor desta parcela (R$)'
                 : 'Valor total (R$)'}
-              <input
+              <MoneyInput
                 required
                 inputMode="decimal"
                 value={draft.amount}
@@ -184,6 +197,12 @@ export function ExpenseDialog({
                   Competência da fatura:{' '}
                   {invoicePreview?.invoiceMonth || draft.invoiceMonth || 'calculada ao salvar'}.
                   Após o fechamento, passa à seguinte.
+                </small>
+              )}
+              {invoicePeriod && (
+                <small>
+                  Fechamento: {invoicePeriod.closingDate.split('-').reverse().join('/')} ·
+                  vencimento: {(invoicePreview?.date || draft.date).split('-').reverse().join('/')}
                 </small>
               )}
             </label>
@@ -414,8 +433,8 @@ export function ExpenseDialog({
               <label className="field">
                 Forma de divisão
                 <select value={draft.split} onChange={(e) => changeSplit(e.target.value)}>
-                  <option value="proportional">Proporcional à renda líquida</option>
                   <option value="equal">Partes iguais</option>
+                  <option value="proportional">Proporcional à renda líquida</option>
                   <option value="custom">Percentuais personalizados</option>
                 </select>
               </label>
@@ -430,7 +449,7 @@ export function ExpenseDialog({
                   {draft.participants.map((id) => (
                     <label className="field" key={id}>
                       Parte de {nameOf(id)} (%)
-                      <input
+                      <PercentInput
                         required
                         type="number"
                         min="0"

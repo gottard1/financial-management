@@ -1,35 +1,16 @@
+import { MoneyInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
-import { recurrenceLabel } from '../../domain/expenses/recurringExpenses.js';
-import { installmentAmount } from '../../domain/finance/extendedFinance.js';
+import {
+  recurrenceLabel,
+  requiresRecurringAmount,
+  recurringReviewEntries,
+} from '../../domain/expenses/recurringExpenses.js';
 
 export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
   const dialog = useRef();
   const [error, setError] = useState('');
-  const [entries, setEntries] = useState(() =>
-    Object.fromEntries(
-      items.map((item) => [
-        item.id,
-        {
-          selected: !item.unavailableReason,
-          amount:
-            item.fixedAmountType === 'variable'
-              ? ''
-              : (
-                  (item.purchaseTotal !== undefined
-                    ? installmentAmount(
-                        item.purchaseTotal,
-                        item.installments.total,
-                        item.installments.current + 1,
-                      )
-                    : item.amount) / 100
-                )
-                  .toFixed(2)
-                  .replace('.', ','),
-        },
-      ]),
-    ),
-  );
+  const [entries, setEntries] = useState(() => recurringReviewEntries(items));
   useEffect(() => {
     dialog.current.showModal();
   }, []);
@@ -83,8 +64,11 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
                   <strong>{item.description}</strong>
                 </label>
                 <p className="hint">
-                  {item.fixedAmountType === 'variable' ? 'Valor variável' : 'Valor fixo'} · Mês
-                  anterior: {money(item.amount)}
+                  {requiresRecurringAmount(item)
+                    ? 'Valor variável · informe somente o valor deste mês, sem sugestão do mês anterior.'
+                    : item.purchaseTotal !== undefined
+                      ? 'Parcela calculada a partir do total da compra.'
+                      : `Valor fixo · mês anterior: ${money(item.amount)}`}
                 </p>
                 {item.unavailableReason && <p className="hint">{item.unavailableReason}</p>}
                 {item.installments && (
@@ -102,7 +86,7 @@ export function RecurringExpensesDialog({ items, month, onClose, onSave }) {
               </div>
               <label className="field">
                 Valor neste mês (R$)
-                <input
+                <MoneyInput
                   required={entries[item.id].selected}
                   disabled={!entries[item.id].selected}
                   inputMode="decimal"

@@ -6,6 +6,8 @@
 
 As regras do Excel e investimentos são extensões aditivas do v3. `domain/finance/extendedFinance` concentra competências de faturas, conservação do total parcelado, integração de recebimentos, reservas, posições manuais, projeções e sugestões de economia. `migrateData` valida as novas coleções opcionais, com listas vazias quando ausentes; codec, backup, regras e servidor compartilham esses contratos. Os painéis em `features/finance` usam os mesmos adaptadores de persistência da conta e do grupo. Não há execução de macros nem importação de dados da planilha. Veja [regras, compatibilidade e uso](excel-finance-and-investments.md).
 
+Cartões podem escolher opcionalmente o mês do vencimento (`dueMonthMode`); a ausência mantém o cálculo automático anterior. As datas concretas são apresentadas antes de salvar e os termos ficam congelados no lançamento. `domain/expenses/consolidatedExpenses` reúne despesas pessoais e cotas de grupos sem persistir cópias; grupos convidados usam as cotas da projeção pública e a identidade da associação autenticada, mantidas pelo hook de grupos. A interface sinaliza carregamento ou cotas incompletas em vez de tratar o total parcial como definitivo. Novas despesas de grupo começam com rateio igual; registros e recorrências anteriores mantêm seu rateio.
+
 ### Domínio independente
 
 Rateio, tributos e resumo mensal são funções puras. Recebem dados explícitos e retornam resultados ou erros de validação. Não acessam estado global nem DOM. O dinheiro trafega em centavos inteiros; conversão de entrada e formatação ocorrem nas bordas da interface.
@@ -17,6 +19,10 @@ Os testes ficam próximos às regras. Quando uma regra financeira mudar, adicion
 Cada pasta de `features/` contém a interface de um fluxo. `components/ui` possui elementos sem responsabilidade de negócio, e `components/layout` contém elementos de navegação. `app/App.jsx` compõe essas peças e mantém a navegação local e as ações entre funcionalidades.
 
 A estrutura usa JavaScript ES Modules e JSX. Não há TypeScript nesta versão. Se contratos crescerem, introduza tipos gradualmente começando por entidades e repositórios, sem reescrever as regras desnecessariamente.
+
+Nos grupos, `content-stack` organiza os blocos por um único `gap`: 24 px no computador e 20 px no celular. Os filhos diretos não acumulam margens verticais, inclusive resumos, avisos, solicitações e painéis aninhados de repasses. Ações em cabeçalhos e linhas não recebem a margem superior usada por ações independentes. Filtros de despesas compartilham uma grade responsiva; cartões de participantes alinham suas ações mesmo com nomes de comprimentos diferentes.
+
+`components/ui/FormattedInput` fornece máscaras de moeda, percentual e telefone. `shared/formatting/inputFormatters` mantém a apresentação independente dos dados: moeda em `1.250,50`, percentual em `53,8` e telefones brasileiros reconhecidos em `(11) 98765-4321`. A normalização visual ocorre ao sair do campo, preservando digitação e cursor. Percentuais usam ponto nos callbacks numéricos existentes; moeda continua passando por `parseMoney`, sem arredondar nem truncar entradas inválidas. Contatos internacionais, ramais e textos históricos não reconhecidos são preservados. Os componentes atendem campos controlados, `FormData`, atualização externa e limpeza do formulário; não exigem migração ou regravação dos dados anteriores. Nomes e descrições continuam como texto livre.
 
 ### Persistência por adaptador
 

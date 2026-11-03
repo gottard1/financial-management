@@ -1,3 +1,4 @@
+import { MoneyInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useRef, useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { recordQuickSettlement } from '../../domain/settlements/quickSettlement.js';
@@ -117,7 +118,7 @@ export function QuickSettlements({
                       >
                         <label className="field">
                           Valor recebido (R$)
-                          <input
+                          <MoneyInput
                             required
                             inputMode="decimal"
                             value={amount}

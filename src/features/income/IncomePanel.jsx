@@ -1,3 +1,4 @@
+import { MoneyInput, PercentInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { calculateCompensation } from '../../domain/income/calculateCompensation.js';
@@ -111,7 +112,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
               : form.type === 'clt'
                 ? 'Salário bruto mensal (R$)'
                 : 'Receita bruta do mês (R$)'}
-            <input
+            <MoneyInput
               required
               inputMode="decimal"
               value={form.gross}
@@ -121,7 +122,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
           </label>
           <label className="field">
             Outros descontos / custos (R$)
-            <input
+            <MoneyInput
               required
               inputMode="decimal"
               value={form.otherDeductions}
@@ -162,7 +163,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
             <>
               <label className="field">
                 Alíquota efetiva de tributos (%)
-                <input
+                <PercentInput
                   required
                   type="number"
                   min="0"
@@ -175,7 +176,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
               </label>
               <label className="field">
                 Custos fixos da empresa (R$)
-                <input
+                <MoneyInput
                   required
                   inputMode="decimal"
                   value={form.pjFixedCosts}
@@ -194,7 +195,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
           <div className="compensation-grid">
             <label className="field">
               Bonificação líquida (R$)
-              <input
+              <MoneyInput
                 required
                 inputMode="decimal"
                 value={form.cashBonus}
@@ -204,7 +205,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
             </label>
             <label className="field">
               Outras entradas líquidas (R$)
-              <input
+              <MoneyInput
                 required
                 inputMode="decimal"
                 value={form.otherCashIncome}
@@ -219,7 +220,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
           <div className="compensation-grid">
             <label className="field">
               Vale-alimentação — VA (R$)
-              <input
+              <MoneyInput
                 required
                 inputMode="decimal"
                 value={form.foodAllowance}
@@ -228,7 +229,7 @@ export function IncomePanel({ data, setData, month, person, notify, onMonthChang
             </label>
             <label className="field">
               Vale-refeição — VR (R$)
-              <input
+              <MoneyInput
                 required
                 inputMode="decimal"
                 value={form.mealAllowance}

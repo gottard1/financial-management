@@ -1,3 +1,4 @@
+import { MoneyInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { Progress } from '../../components/ui/Progress.jsx';
@@ -52,7 +53,7 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
         <div className="form-grid">
           <label className="field">
             Limite total de gastos (R$)
-            <input
+            <MoneyInput
               name="spendingLimit"
               required
               inputMode="decimal"
@@ -62,7 +63,7 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
           </label>
           <label className="field">
             Meta de guardar neste mês (R$)
-            <input
+            <MoneyInput
               name="savingTarget"
               required
               inputMode="decimal"
@@ -107,7 +108,7 @@ export function BudgetPanel({ data, setData, scope, month, stats, notify }) {
           {availableCategories.map((c) => (
             <label className="field" key={c}>
               {c}
-              <input
+              <MoneyInput
                 name={categoryField(c)}
                 required
                 inputMode="decimal"

@@ -25,7 +25,7 @@ export function PaymentRequests({ reports, onRespond, actorId, userUid, compact 
   }
   if (compact && !reports.length) return null;
   return (
-    <section className="payment-requests" aria-label="Solicitações de recebimento">
+    <section className="payment-requests content-stack" aria-label="Solicitações de recebimento">
       {error && (
         <p className="notice error" role="alert">
           {error}

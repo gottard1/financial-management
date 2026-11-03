@@ -18,6 +18,7 @@ import { purgeGroupHistoryBatch } from '../groups/groupMembers.js';
 import { addExtraCategory, extraCategoryOptions } from '../expenses/expenseCategories.js';
 import {
   invoiceDates,
+  cardInvoicePeriod,
   installmentAmount,
   futureInstallments,
   prepareExpense,
@@ -133,6 +134,102 @@ test('legacy month by due date and snapshots survive card changes and editing ge
   const noCard = calculateWorkspace(d, '2026-11', scope, d.months['2026-11']);
   assert.equal(noCard.total, 10000);
   assert.equal(noCard.available, 90000);
+});
+test('card closing day 31 clamps to month end and day 6 can fall in the next month or next year', () => {
+  const card = { closingDay: 31, dueDay: 6, dueMonthMode: 'next' };
+  assert.deepEqual(cardInvoicePeriod('2026-11', card), {
+    invoiceMonth: '2026-11',
+    closingDate: '2026-11-30',
+    date: '2026-12-06',
+  });
+  assert.deepEqual(invoiceDates('2026-11-30', card), {
+    invoiceMonth: '2026-11',
+    date: '2026-12-06',
+  });
+  assert.deepEqual(invoiceDates('2026-12-01', card), {
+    invoiceMonth: '2026-12',
+    date: '2027-01-06',
+  });
+  assert.deepEqual(cardInvoicePeriod('2028-02', card), {
+    invoiceMonth: '2028-02',
+    closingDate: '2028-02-29',
+    date: '2028-03-06',
+  });
+  assert.equal(cardInvoicePeriod('2027-02', card).closingDate, '2027-02-28');
+});
+test('explicit due-month options are optional, round-trip and never recalculate historical card terms', () => {
+  const legacy = { closingDay: 5, dueDay: 20 };
+  assert.equal(invoiceDates('2026-11-01', legacy).date, '2026-11-20');
+  assert.equal(invoiceDates('2026-11-01', { ...legacy, dueMonthMode: 'auto' }).date, '2026-11-20');
+  assert.equal(invoiceDates('2026-11-01', { ...legacy, dueMonthMode: 'next' }).date, '2026-12-20');
+  assert.equal(
+    cardInvoicePeriod('2026-11', { closingDay: 6, dueDay: 6, dueMonthMode: 'same' }).date,
+    '2026-11-06',
+  );
+  assert.equal(cardInvoicePeriod('2026-11', { closingDay: 6, dueDay: 6 }).date, '2026-12-06');
+  const d = fixture();
+  d.cards = [{ ...legacy, id: 'card', scope, name: 'Cartão' }];
+  const old = prepareExpense(
+    { ...expense({ cardId: 'card', purchaseDate: '2026-11-01' }), amount: '100,00' },
+    d,
+    parseMoney,
+  );
+  d.cards[0].dueMonthMode = 'next';
+  const recent = prepareExpense(
+    { ...expense({ id: 'new', cardId: 'card', purchaseDate: '2026-11-01' }), amount: '100,00' },
+    d,
+    parseMoney,
+  );
+  d.expenses = [old, recent];
+  const restored = roundTrip(d);
+  assert.equal(restored.cards[0].dueMonthMode, 'next');
+  assert.equal(restored.expenses[0].date, '2026-11-20');
+  assert.equal(restored.expenses[0].cardTerms.dueMonthMode, undefined);
+  assert.equal(restored.expenses[1].date, '2026-12-20');
+  assert.equal(restored.expenses[1].cardTerms.dueMonthMode, 'next');
+  assert.equal(prepareExpense({ ...old, amount: '100,00' }, d, parseMoney).date, '2026-11-20');
+  assert.throws(
+    () => migrateData({ ...d, cards: [{ ...d.cards[0], dueMonthMode: 'invalid' }] }),
+    /vencimento/,
+  );
+  assert.throws(
+    () => cardInvoicePeriod('2026-11', { closingDay: 31, dueDay: 6, dueMonthMode: 'same' }),
+    /anterior ao fechamento/,
+  );
+});
+test('participants can configure a due-month rule and snapshots preserve only authorized card terms', () => {
+  const d = fixture();
+  d.groups = [{ id: 'g', name: 'Grupo', memberIds: ['person-0'] }];
+  const next = applySharedGroupChanges(d, 'g', [
+    {
+      kind: 'cards',
+      id: 'card',
+      value: { name: 'Cartão compartilhado', closingDay: 31, dueDay: 6, dueMonthMode: 'next' },
+    },
+  ]);
+  const gs = 'group:g';
+  next.expenses = [
+    prepareExpense(
+      {
+        ...expense({ workspace: gs, cardId: 'card', purchaseDate: '2026-11-30' }),
+        amount: '100,00',
+      },
+      next,
+      parseMoney,
+    ),
+  ];
+  const snapshot = projectSharedGroup(next, 'g'),
+    restored = sharedGroupData(snapshot);
+  assert.equal(snapshot.cards[0].dueMonthMode, 'next');
+  assert.equal(snapshot.expenses[0].cardTerms.dueMonthMode, 'next');
+  assert.equal(snapshot.expenses[0].date, '2026-12-06');
+  const changes = sharedGroupChanges(restored, {
+    ...restored,
+    cards: restored.cards.map((c) => ({ ...c, dueMonthMode: 'auto' })),
+  });
+  const updated = applySharedGroupChanges(next, 'g', changes);
+  assert.equal(updated.cards[0].dueMonthMode, 'auto');
+  assert.equal(updated.expenses[0].date, '2026-12-06');
 });
 test('total-price installments conserve every cent, generation and reviewed copying cannot duplicate an origin', () => {
   for (const [value, count] of [

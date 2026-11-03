@@ -19,6 +19,7 @@ import {
 import { ReferenceMonth } from '../components/layout/ReferenceMonth.jsx';
 import { MonthlyOverview } from '../features/overview/MonthlyOverview.jsx';
 import { ExpenseList } from '../features/expenses/ExpenseList.jsx';
+import { ConsolidatedExpensesPanel } from '../features/expenses/ConsolidatedExpensesPanel.jsx';
 import { ExpenseDialog } from '../features/expenses/ExpenseDialog.jsx';
 import { RecurringExpensesDialog } from '../features/expenses/RecurringExpensesDialog.jsx';
 import {
@@ -82,7 +83,11 @@ export function App() {
 
 function FinanceApp({ storageNamespace }) {
   const { user, localMode, signOut } = useAuth();
-  const { groups: sharedGroups, error: sharingError } = useSharedMemberships(user, localMode);
+  const {
+    groups: sharedGroups,
+    error: sharingError,
+    loading: sharedGroupsLoading,
+  } = useSharedMemberships(user, localMode);
   const {
     data: privateData,
     setData,
@@ -199,7 +204,7 @@ function FinanceApp({ storageNamespace }) {
       amount: '',
       category: 'Moradia',
       date: month + '-01',
-      split: mode === 'group' ? 'proportional' : 'equal',
+      split: 'equal',
       participants: [...activeMemberIds],
       percentages: {},
       status: 'pending',
@@ -353,6 +358,7 @@ function FinanceApp({ storageNamespace }) {
   const titles = {
     overview: 'Clareza para o seu mês.',
     expenses: 'Despesas',
+    allExpenses: 'Todas as minhas despesas',
     budget: 'Orçamento',
     categories: 'Categorias',
     savings: 'Metas e reservas',
@@ -603,7 +609,10 @@ function FinanceApp({ storageNamespace }) {
             />
           </div>
         )}
-        <div className="app-page-content" inert={blocked ? true : undefined}>
+        <div
+          className={'app-page-content' + (mode === 'group' ? ' content-stack' : '')}
+          inert={blocked ? true : undefined}
+        >
           {financialPage && mode === 'individual' && localMode && selectablePeople.length > 1 && (
             <label className="field local-person-picker">
               Pessoa no modo local
@@ -796,6 +805,25 @@ function FinanceApp({ storageNamespace }) {
                 />
               )}
               {tab === 'annual' && <AnnualPanel {...{ data, scope, month }} />}
+              {tab === 'allExpenses' && mode === 'individual' && (
+                <ConsolidatedExpensesPanel
+                  key={person + month}
+                  data={data}
+                  personId={person}
+                  month={month}
+                  remoteGroups={sharedGroups}
+                  accountUid={user?.uid}
+                  sharingError={sharingError}
+                  sharingLoading={sharedGroupsLoading}
+                  onOpen={(row) => {
+                    if (row.kind === 'group') {
+                      setMode('group');
+                      setGroupId(row.groupId);
+                    } else setMode('individual');
+                    go('expenses');
+                  }}
+                />
+              )}
               {statsError && (
                 <div className="notice error" role="alert">
                   <p>{statsError} Edite as rendas ou a forma de divisão das despesas.</p>

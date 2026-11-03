@@ -4,6 +4,7 @@ import {
   recurringCandidates,
   copyRecurringExpenses,
   recurrenceLabel,
+  recurringReviewEntries,
 } from './recurringExpenses.js';
 import { migrateData } from '../budget/workspaceCalculations.js';
 import { encodeFinance, decodeFinance } from '../budget/financeCloudCodec.js';
@@ -148,6 +149,27 @@ test('copies variable monthly value without modifying history, IDs or allocation
 test('requires an explicit positive amount and never falls back to last month for variable bills', () => {
   for (const value of ['', '0', '-1', 'abc', '12,345'])
     assert.throws(() => copyRecurringExpenses([expense()], scope, '2026-02', entry(value)));
+});
+test('variable reviews start empty every month and keep only the current user-entered amount', () => {
+  const original = expense({ amount: 98765 }),
+    fixed = expense({ id: 'rent', fixedAmountType: 'fixed', amount: 200000 });
+  const entries = recurringReviewEntries([original, fixed]);
+  assert.equal(entries.electricity.amount, '');
+  assert.equal(entries.rent.amount, '2000,00');
+  assert.throws(() => copyRecurringExpenses([original], scope, '2026-02', entries));
+  entries.electricity.amount = '175,45';
+  const [next] = copyRecurringExpenses([original], scope, '2026-02', entries, () => 'feb');
+  assert.equal(next.amount, 17545);
+  assert.equal(original.amount, 98765);
+  assert.equal(recurringReviewEntries([next]).feb.amount, '');
+});
+test('known total-price installments keep their calculated cents even if old metadata marks them variable', () => {
+  const item = expense({
+    purchaseTotal: 10000,
+    amount: 3334,
+    installments: { total: 3, current: 1 },
+  });
+  assert.equal(recurringReviewEntries([item]).electricity.amount, '33,33');
 });
 test('isolates recurrence by month and workspace, skipping bills without recurrence', () => {
   const items = [

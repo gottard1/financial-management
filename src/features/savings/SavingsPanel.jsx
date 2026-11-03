@@ -1,3 +1,4 @@
+import { MoneyInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { Progress } from '../../components/ui/Progress.jsx';
@@ -110,7 +111,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
             <div className="form-grid">
               <label className="field">
                 Valor (R$)
-                <input name="amount" inputMode="decimal" required placeholder="0,00" />
+                <MoneyInput name="amount" inputMode="decimal" required placeholder="0,00" />
               </label>
               <label className="field">
                 Data
@@ -160,7 +161,7 @@ export function SavingsPanel({ data, setData, scope, month, stats, notify, canDe
               </label>
               <label className="field">
                 Valor desejado (R$)
-                <input name="target" required inputMode="decimal" placeholder="0,00" />
+                <MoneyInput name="target" required inputMode="decimal" placeholder="0,00" />
               </label>
               <label className="field">
                 Prazo desejado (opcional)

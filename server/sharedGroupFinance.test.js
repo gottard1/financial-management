@@ -110,6 +110,40 @@ const bill = {
   split: 'proportional',
   percentages: {},
 };
+test('shared variable recurring payments require the new month value and preserve the preceding amount', async () => {
+  const { execute, read } = harness();
+  await execute('member', {
+    action: 'upsert',
+    changes: [
+      {
+        kind: 'expenses',
+        id: 'variable',
+        value: { ...bill, split: 'equal', fixed: true, fixedAmountType: 'variable' },
+      },
+    ],
+  });
+  await assert.rejects(
+    () =>
+      execute('member', {
+        revision: 2,
+        action: 'recurring',
+        month: '2026-12',
+        entries: { variable: { selected: true, amount: '' } },
+      }),
+    { status: 400 },
+  );
+  assert.equal(read().revision, 2);
+  assert.equal(read().data.expenses.length, 1);
+  await execute('member', {
+    revision: 2,
+    action: 'recurring',
+    month: '2026-12',
+    entries: { variable: { selected: true, amount: '190,25' } },
+  });
+  const history = read().data.expenses;
+  assert.equal(history.find((e) => e.id === 'variable').amount, bill.amount);
+  assert.equal(history.find((e) => e.originId === 'variable').amount, 19025);
+});
 test('new shared cards, events, reserve transfers and investments commit together without private income or duplicate wealth', async () => {
   const { execute, read, rows } = harness();
   const result = await execute('member', {

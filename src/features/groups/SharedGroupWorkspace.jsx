@@ -193,7 +193,7 @@ export function SharedGroupWorkspace({
       date: month + '-01',
       participants: [...active],
       payer: membership.personId,
-      split: 'proportional',
+      split: 'equal',
       percentages: {},
       status: 'pending',
       fixed: false,
@@ -301,7 +301,7 @@ export function SharedGroupWorkspace({
         </p>
       )}
       {busy && <p role="status">Salvando alterações do grupo…</p>}
-      <div inert={busy ? true : undefined}>
+      <div className="content-stack" inert={busy ? true : undefined}>
         {selectedTab === 'financeSetup' && (
           <FinanceSetupPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
         )}
