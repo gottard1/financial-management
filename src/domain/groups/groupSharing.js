@@ -149,6 +149,7 @@ export function projectSharedGroup(data, groupId) {
             'purchaseDate',
             'invoiceMonth',
             'purchaseTotal',
+            'paymentSource',
           ]
             .filter((key) => Object.hasOwn(expense, key))
             .map((key) => [key, expense[key]]),

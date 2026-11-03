@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { recurrenceLabel } from '../../domain/expenses/recurringExpenses.js';
 import { money, splitExpense } from '../../domain/expenses/expenseCalculations.js';
+import {
+  paymentSource,
+  paymentSources,
+  usesBenefit,
+} from '../../domain/benefits/benefitPayments.js';
 
 const splitLabels = {
   proportional: 'Proporcional à renda',
@@ -78,7 +83,8 @@ export function ExpenseList({
   const shared = mode === 'group';
   const [essential, setEssential] = useState(false),
     [companion, setCompanion] = useState(''),
-    [eventId, setEventId] = useState('');
+    [eventId, setEventId] = useState(''),
+    [source, setSource] = useState('all');
   const items = visible
     .filter(
       (e) =>
@@ -86,6 +92,7 @@ export function ExpenseList({
         (!companion || e.companion === companion) &&
         (!eventId || e.eventId === eventId),
     )
+    .filter((e) => source === 'all' || paymentSource(e) === source)
     .map((expense) => {
       let shares = null;
       try {
@@ -141,6 +148,17 @@ export function ExpenseList({
         </p>
       )}
       <div className="expense-filters">
+        <label className="field">
+          Fonte do pagamento
+          <select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="all">Todas as fontes</option>
+            {Object.entries(paymentSources).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="field expense-filter">
           Mostrar
           <select value={filter} onChange={(event) => setFilter(event.target.value)}>
@@ -229,6 +247,9 @@ export function ExpenseList({
                       <small>
                         {item.date} · {item.expense.category}
                         {item.expense.fixed ? ` · ${recurrenceLabel(item.expense)}` : ''}
+                        {usesBenefit(item.expense)
+                          ? ` · ${paymentSources[paymentSource(item.expense)]}`
+                          : ''}
                       </small>
                     </td>
                     <td>{money(item.expense.amount)}</td>
@@ -267,6 +288,9 @@ export function ExpenseList({
                   <span>
                     Vence em {item.date} · {item.expense.category}
                     {item.expense.fixed ? ` · ${recurrenceLabel(item.expense)}` : ''}
+                    {usesBenefit(item.expense)
+                      ? ` · ${paymentSources[paymentSource(item.expense)]}`
+                      : ''}
                   </span>
                   <ExpenseStatus status={item.expense.status} />
                 </div>

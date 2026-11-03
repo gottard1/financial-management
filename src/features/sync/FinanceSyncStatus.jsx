@@ -22,9 +22,16 @@ export function FinanceSyncStatus({ status, error, retry, useCloud, exportLocal 
         {!compact && <small>Arquivos de comprovantes continuam neste navegador.</small>}
       </div>
       {(status === 'offline' || status === 'pending') && (
-        <button className="button secondary" onClick={retry}>
-          Tentar sincronizar
-        </button>
+        <div className="actions">
+          <button className="button secondary" onClick={retry}>
+            Tentar sincronizar
+          </button>
+          {status === 'offline' && exportLocal && (
+            <button className="button secondary" onClick={exportLocal}>
+              Exportar cópia local
+            </button>
+          )}
+        </div>
       )}
       {status === 'conflict' && (
         <div className="actions">

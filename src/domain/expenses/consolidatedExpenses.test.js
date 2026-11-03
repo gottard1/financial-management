@@ -53,6 +53,8 @@ test('personal and shared responsibilities appear together once while other peop
     personal: 1000,
     shared: 5001,
     total: 6001,
+    cash: 6001,
+    benefits: 0,
     paidByMe: 11001,
     incomplete: false,
   });

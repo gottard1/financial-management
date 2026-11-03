@@ -1,3 +1,4 @@
+import { validatePaymentSource } from '../benefits/benefitPayments.js';
 const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function cents(value, label = 'Valor') {
@@ -91,6 +92,7 @@ function allocate(amount, participants, weights, memberIds) {
 export function splitExpense(expense, incomes, memberIds) {
   const members = validateContext(incomes, memberIds);
   record(expense, 'Despesa');
+  validatePaymentSource(expense);
   const amount = cents(expense.amount);
   validIds(expense.participants, 'participante');
   if (expense.participants.some((id) => !members.has(id)))

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { createNamespacedStorage } from '../infrastructure/storage/namespacedStorage.js';
 import { createFinanceSync } from '../infrastructure/storage/financeSync.js';
+import { financeSyncErrorMessage } from '../infrastructure/storage/financeSyncErrors.js';
 import { auth } from '../infrastructure/firebase/client.js';
 import {
   loadFinanceData,
@@ -80,14 +81,7 @@ export function useFinanceData(namespace = 'local') {
             setCloudRevision(revision);
             setSyncStatus(status);
           },
-          onError: (error) =>
-            setSyncError(
-              error
-                ? error.code && error.code !== 'finance/conflict'
-                  ? 'Não foi possível salvar na nuvem. Seus dados continuam neste navegador. Confira a conexão e as regras do Firestore.'
-                  : error.message
-                : '',
-            ),
+          onError: (error) => setSyncError(financeSyncErrorMessage(error)),
         });
         sync.current = engine;
         reconnect.current = () => {
@@ -98,7 +92,7 @@ export function useFinanceData(namespace = 'local') {
       })
       .catch((error) => {
         if (!stopped) {
-          setSyncError(error.message);
+          setSyncError(financeSyncErrorMessage(error));
           setSyncStatus('offline');
         }
       });

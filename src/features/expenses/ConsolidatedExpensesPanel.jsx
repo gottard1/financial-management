@@ -4,6 +4,7 @@ import {
   consolidatedTotals,
 } from '../../domain/expenses/consolidatedExpenses.js';
 import { money } from '../../domain/expenses/expenseCalculations.js';
+import { paymentSource, paymentSources } from '../../domain/benefits/benefitPayments.js';
 
 export function ConsolidatedExpensesPanel({
   data,
@@ -18,14 +19,16 @@ export function ConsolidatedExpensesPanel({
   const [origin, setOrigin] = useState('all'),
     [status, setStatus] = useState('all'),
     [category, setCategory] = useState('all'),
-    [essential, setEssential] = useState(false);
+    [essential, setEssential] = useState(false),
+    [source, setSource] = useState('all');
   const rows = consolidatedExpenses(data, personId, month, remoteGroups, accountUid);
   const visible = rows.filter(
     (r) =>
       (origin === 'all' || r.originKey === origin) &&
       (status === 'all' || r.status === status) &&
       (category === 'all' || r.category === category) &&
-      (!essential || r.essential),
+      (!essential || r.essential) &&
+      (source === 'all' || paymentSource(r.expense) === source),
   );
   const totals = consolidatedTotals(visible);
   const amount = (row) => (row.error ? 'Cota indisponível' : money(row.ownAmount));
@@ -49,6 +52,12 @@ export function ConsolidatedExpensesPanel({
             </article>
           ))}
         </div>
+        {totals.benefits > 0 && (
+          <p className="notice">
+            Da sua responsabilidade: {money(totals.cash)} em dinheiro e {money(totals.benefits)}{' '}
+            cobertos pelo seu VA/VR. O consumo total acima inclui ambos.
+          </p>
+        )}
         {sharingLoading && (
           <p className="notice" role="status">
             Carregando despesas dos grupos compartilhados. Os totais ainda são parciais.
@@ -65,6 +74,17 @@ export function ConsolidatedExpensesPanel({
       <section className="panel">
         <h2>Todas as despesas de {month.split('-').reverse().join('/')}</h2>
         <div className="expense-filters">
+          <label className="field">
+            Fonte do pagamento
+            <select value={source} onChange={(e) => setSource(e.target.value)}>
+              <option value="all">Todas as fontes</option>
+              {Object.entries(paymentSources).map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="field">
             Origem
             <select value={origin} onChange={(e) => setOrigin(e.target.value)}>
@@ -131,6 +151,8 @@ export function ConsolidatedExpensesPanel({
                         <br />
                         <small>
                           {row.origin} · {row.category}
+                          {' · '}
+                          {paymentSources[paymentSource(row.expense)]}
                         </small>
                         {row.error && <p className="metric-negative">{row.error}</p>}
                       </td>
@@ -158,6 +180,8 @@ export function ConsolidatedExpensesPanel({
                   <h3>{row.description}</h3>
                   <p>
                     {row.origin} · {row.category}
+                    {' · '}
+                    {paymentSources[paymentSource(row.expense)]}
                   </p>
                   <p>Vence em {row.date.split('-').reverse().join('/')}</p>
                   <p>

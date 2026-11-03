@@ -1085,15 +1085,18 @@ export function AnnualPanel({ data, scope, month, snapshot }) {
   const rows = Array.from({ length: 12 }, (_, i) => {
     const m = `${year}-${String(i + 1).padStart(2, '0')}`;
     try {
+      const stats = snapshot
+        ? snapshot.overview?.[m]?.stats || {
+            total: 0,
+            savingsThisMonth: 0,
+            investmentApplications: 0,
+          }
+        : calculateWorkspace(data, m, scope, data.months[m] || {});
       return {
         month: m,
-        ...(snapshot
-          ? snapshot.overview?.[m]?.stats || {
-              total: 0,
-              savingsThisMonth: 0,
-              investmentApplications: 0,
-            }
-          : calculateWorkspace(data, m, scope, data.months[m] || {})),
+        ...stats,
+        cashExpenses: stats.cashExpenses ?? stats.total,
+        benefitExpenses: stats.benefitExpenses ?? 0,
       };
     } catch (e) {
       return { month: m, error: e.message };
@@ -1102,6 +1105,8 @@ export function AnnualPanel({ data, scope, month, snapshot }) {
   const fields = [
     ['income', 'Receitas novas'],
     ['total', 'Despesas'],
+    ['cashExpenses', 'Despesas em dinheiro'],
+    ['benefitExpenses', 'Parte coberta por VA/VR'],
     ['balanceBeforeContributions', 'Saldo antes dos aportes'],
     ['savingsThisMonth', 'Aportes às reservas'],
     ['investmentApplications', 'Aplicações do caixa'],
@@ -1154,7 +1159,7 @@ export function AnnualPanel({ data, scope, month, snapshot }) {
                 <tr key={r.month}>
                   <td>{r.month}</td>
                   {r.error ? (
-                    <td colSpan={7} role="alert">
+                    <td colSpan={fields.length} role="alert">
                       {r.error}
                     </td>
                   ) : (

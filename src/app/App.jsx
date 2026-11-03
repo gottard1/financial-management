@@ -20,6 +20,7 @@ import { ReferenceMonth } from '../components/layout/ReferenceMonth.jsx';
 import { MonthlyOverview } from '../features/overview/MonthlyOverview.jsx';
 import { ExpenseList } from '../features/expenses/ExpenseList.jsx';
 import { ConsolidatedExpensesPanel } from '../features/expenses/ConsolidatedExpensesPanel.jsx';
+import { BenefitsPanel } from '../features/benefits/BenefitsPanel.jsx';
 import { ExpenseDialog } from '../features/expenses/ExpenseDialog.jsx';
 import { RecurringExpensesDialog } from '../features/expenses/RecurringExpensesDialog.jsx';
 import {
@@ -359,6 +360,7 @@ function FinanceApp({ storageNamespace }) {
     overview: 'Clareza para o seu mês.',
     expenses: 'Despesas',
     allExpenses: 'Todas as minhas despesas',
+    benefits: 'VA / VR',
     budget: 'Orçamento',
     categories: 'Categorias',
     savings: 'Metas e reservas',
@@ -815,6 +817,33 @@ function FinanceApp({ storageNamespace }) {
                   accountUid={user?.uid}
                   sharingError={sharingError}
                   sharingLoading={sharedGroupsLoading}
+                  onOpen={(row) => {
+                    if (row.kind === 'group') {
+                      setMode('group');
+                      setGroupId(row.groupId);
+                    } else setMode('individual');
+                    go('expenses');
+                  }}
+                />
+              )}
+              {tab === 'benefits' && mode === 'individual' && (
+                <BenefitsPanel
+                  key={person + month}
+                  {...{ data, setData, month }}
+                  personId={person}
+                  remoteGroups={sharedGroups}
+                  accountUid={user?.uid}
+                  sharingError={sharingError}
+                  sharingLoading={sharedGroupsLoading}
+                  notify={setNotice}
+                  onNew={() => {
+                    newExpense();
+                    setDraft((current) => ({
+                      ...current,
+                      category: 'Alimentação',
+                      paymentSource: 'foodAllowance',
+                    }));
+                  }}
                   onOpen={(row) => {
                     if (row.kind === 'group') {
                       setMode('group');

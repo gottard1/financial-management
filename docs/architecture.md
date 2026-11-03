@@ -136,7 +136,11 @@ Essa árvore continua sendo uma proposta de evolução para edição colaborativ
 
 `sumRestrictedBenefits` agrega apenas os perfis de renda do mês e das pessoas selecionadas. A interface não soma benefícios à disponibilidade de caixa. Os novos campos têm padrão zero, mantendo a compatibilidade com configurações antigas.
 
-O total nominal de benefícios não é um saldo de cartão. Rastrear pagamentos com VA/VR exigirá um modelo de fonte de pagamento e consumo; isso não é inferido dos valores mensais informados.
+`domain/benefits/benefitPayments` implementa a fonte opcional `expense.paymentSource`: `cash` (padrão por ausência), `foodAllowance` e `mealAllowance`. O consumo continua nos totais e categorias; `cashExpenses` separa as responsabilidades em dinheiro usadas no saldo antes dos aportes, na disponibilidade e nas sugestões de economia. No espaço pessoal, a própria cota paga pelo próprio vale sai de `cashExpenses`; cotas de outros participantes continuam em dinheiro. No grupo, o desembolso em vale fica separado do desembolso em dinheiro, com rateio, pagamentos, saldos e acertos idênticos aos anteriores. O vale sempre pertence ao pagador, inclusive quando não participa do rateio.
+
+`features/benefits/BenefitsPanel` usa a união derivada das despesas, incluindo projeções de grupos e a identidade da associação. Desconta o valor integral pago pelo titular, sem repetir a cota ou duplicar o grupo administrado. Contas pendentes são compromissos, não débitos realizados. Os valores mensais são os mesmos `foodAllowance`/`mealAllowance` do perfil; editar o vale preserva a renda em dinheiro e as outras configurações do mês. Não há saldo acumulado inferido ou transporte automático de sobras. Veja [contrato e limites](va-vr.md).
+
+O campo opcional viaja no documento de despesa já existente, no backup e na sincronização. O servidor valida a enumeração e a incompatibilidade com fatura de crédito; aceita alterações e remoção explícita pela mesma API e mantém as permissões. Somente a fonte e a despesa do grupo são públicas: configurações e saldos dos vales continuam privados. Não há alteração nas regras do Firestore para esta extensão.
 
 - **Fechamento de mês:** salvar renda e divisão como snapshots para impedir que edições retroativas alterem períodos fechados.
 - **Pagamentos:** separar obrigações de pagamentos para suportar parcelas, pagamentos parciais e múltiplos pagadores.

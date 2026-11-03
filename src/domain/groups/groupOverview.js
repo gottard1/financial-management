@@ -5,6 +5,8 @@ export function publicGroupStats(stats) {
       'total',
       'paid',
       'pending',
+      'cashExpenses',
+      'benefitExpenses',
       'shares',
       'paidBy',
       'balances',

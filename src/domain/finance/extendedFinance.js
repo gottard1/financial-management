@@ -1,4 +1,5 @@
 import { splitExpense } from '../expenses/expenseCalculations.js';
+import { validatePaymentSource } from '../benefits/benefitPayments.js';
 /** Optional finance rules. All amounts are integer cents; no I/O or market operations. */
 export const extensionArrays = [
   'cards',
@@ -485,6 +486,7 @@ export function validateExtensions(data, scopeMembers) {
     if (c.destinationId !== undefined && typeof c.destinationId !== 'string')
       throw new Error('Destino de aporte inválido.');
   for (const e of data.expenses) {
+    validatePaymentSource(e);
     for (const key of ['eventId', 'cardId', 'originId'])
       if (e[key] !== undefined && typeof e[key] !== 'string')
         throw new Error('Referência de despesa inválida.');

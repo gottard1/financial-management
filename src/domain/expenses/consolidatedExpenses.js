@@ -1,4 +1,5 @@
 import { splitExpense } from './expenseCalculations.js';
+import { cashExpenseShare } from '../benefits/benefitPayments.js';
 import { expenseMonth, monthlyIncomes, total } from '../finance/extendedFinance.js';
 
 /** Read-only union. Never copies a group expense into personal storage. */
@@ -35,6 +36,8 @@ export function consolidatedExpenses(data, personId, month, remoteGroups = [], a
       essential: expense.essential === true,
       totalAmount: expense.amount,
       ownAmount,
+      cashAmount: ownAmount === null ? null : cashExpenseShare(expense, owner, ownAmount),
+      payerIsMe: expense.payer === owner,
       error,
       paidByMe: expense.status === 'paid' && expense.payer === owner ? expense.amount : 0,
       kind: group ? 'group' : 'personal',
@@ -82,6 +85,8 @@ export function consolidatedTotals(rows) {
     personal: total(known.filter((r) => r.kind === 'personal').map((r) => r.ownAmount)),
     shared: total(known.filter((r) => r.kind === 'group').map((r) => r.ownAmount)),
     total: total(known.map((r) => r.ownAmount)),
+    cash: total(known.map((r) => r.cashAmount)),
+    benefits: total(known.map((r) => r.ownAmount - r.cashAmount)),
     paidByMe: total(rows.map((r) => r.paidByMe)),
     incomplete: rows.some((r) => r.error),
   };

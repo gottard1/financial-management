@@ -1,4 +1,5 @@
 import { splitExpense, summarize } from '../expenses/expenseCalculations.js';
+import { cashExpenseShare, usesBenefit } from '../benefits/benefitPayments.js';
 import { validateInstallments } from '../expenses/recurringExpenses.js';
 import { validatePaymentReport } from '../settlements/paymentReports.js';
 import { validateCategoryNames } from '../expenses/expenseCategories.js';
@@ -515,6 +516,7 @@ export function calculateWorkspace(data, month, scope, incomes) {
   };
   let stats,
     income,
+    cashExpenses = 0,
     expensePersonalTotal = 0,
     sharedShareTotal = 0;
   if (scope.startsWith('group:')) {
@@ -527,6 +529,7 @@ export function calculateWorkspace(data, month, scope, incomes) {
       members,
     );
     sharedShareTotal = stats.total;
+    cashExpenses = sum(shared.filter((e) => !usesBenefit(e)).map((e) => e.amount));
     income = sum(members.map((id) => (Object.hasOwn(incomes, id) ? incomes[id] : 0)));
     shared.forEach((expense) => addCategory(expense.category, expense.amount));
   } else {
@@ -535,6 +538,7 @@ export function calculateWorkspace(data, month, scope, incomes) {
     const personal = currentExpenses.filter((expense) => expense.workspace === scope);
     const personalStats = summarize(personal, incomes, members);
     expensePersonalTotal = personalStats.total;
+    cashExpenses = sum(personal.map((e) => cashExpenseShare(e, owner, e.amount)));
     let sharedPaid = 0;
     for (const group of data.groups.filter((item) => item.memberIds.includes(owner))) {
       for (const expense of currentExpenses.filter(
@@ -542,6 +546,7 @@ export function calculateWorkspace(data, month, scope, incomes) {
       )) {
         if (!expense.participants.includes(owner)) continue;
         const amount = splitExpense(expense, incomes, group.memberIds)[owner] ?? 0;
+        cashExpenses = sum([cashExpenses, cashExpenseShare(expense, owner, amount)]);
         sharedShareTotal = sum([sharedShareTotal, amount]);
         if (expense.status === 'paid') sharedPaid = sum([sharedPaid, amount]);
         else if (expense.status !== 'pending') throw new Error('Situação da conta inválida.');
@@ -575,11 +580,13 @@ export function calculateWorkspace(data, month, scope, incomes) {
   const flows = monthlyAssetFlows(data, scope, month);
   const assets = assetSummary(data, scope, month + '-31');
   savingsThisMonth = sum([savingsThisMonth, flows.deposits]);
-  const balanceBeforeContributions = safe(BigInt(income) - BigInt(stats.total));
+  const balanceBeforeContributions = safe(BigInt(income) - BigInt(cashExpenses));
   const plan = data.plans?.[`${scope}|${month}`] || {};
   return {
     ...stats,
     income,
+    cashExpenses,
+    benefitExpenses: stats.total - cashExpenses,
     categories: { ...categories },
     savingsThisMonth,
     savingsAll,

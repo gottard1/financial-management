@@ -21,6 +21,7 @@ export function WorkspaceNavigation({ mode, tab, onNavigate, administrator }) {
           ['overview', 'Visão geral'],
           ['expenses', 'Despesas'],
           ['allExpenses', 'Todas as despesas'],
+          ['benefits', 'VA / VR'],
           ['comparison', 'Análises'],
           ['budget', 'Orçamento'],
           ['categories', 'Categorias'],

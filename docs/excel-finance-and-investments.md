@@ -62,7 +62,7 @@ Novas despesas de grupo começam com **Partes iguais**, tanto para administrador
 Sem recebimentos e sem nova configuração, o resultado antigo é idêntico. A mesma renda integrada alimenta o rateio proporcional, sem alterar VA/VR ou os cálculos tributários existentes. Um resgate é registrado na reserva/investimento, nunca como recebimento novo.
 
 ```text
-Saldo antes dos aportes = renda nova − despesas por responsabilidade
+Saldo antes dos aportes = renda nova − responsabilidades em dinheiro
 Aportes do mês = aportes existentes + depósitos do caixa nas reservas
 Disponível = saldo antes dos aportes + resgates para o caixa
              − aportes do mês − aplicações vindas diretamente do caixa
@@ -70,6 +70,8 @@ Patrimônio do espaço = saldo das reservas + valor atual dos investimentos
 ```
 
 Transferências entre reservas e aplicações financiadas por reservas não descontam novamente o caixa. Resgates destinados à reserva não aumentam o disponível. Saldo inicial não é receita nem aporte do fluxo mensal. Taxas e impostos do investimento reduzem a posição, separados de consumo pessoal.
+
+A fonte opcional de pagamento VA/VR separa a parte coberta pelo próprio vale das responsabilidades em dinheiro; o consumo e as categorias continuam incluindo ambas. Sem a opção, o cálculo antigo permanece igual. A aba **VA / VR** acompanha gastos e pendências dos vales no mês, separada do fluxo de caixa. Veja [regras dos benefícios](va-vr.md).
 
 ## Economia e histórico
 
@@ -95,7 +97,7 @@ Aplicações da reserva diminuem o objetivo de origem; o investimento pode acomp
 
 As novas coleções opcionais do formato v3 são `cards`, `events`, `incomeEntries`, `reserveMovements`, `investments`, `investmentMovements` e `investmentValuations`. Ausência significa lista vazia. Migração e serialização não modificam o objeto de origem, os IDs ou as antigas chaves v1/v2. Backup JSON e codec por registro incluem as novas coleções; dados inválidos continuam protegidos contra sobrescrita.
 
-Cadastros e movimentos de grupos usam o mesmo servidor autenticado, revisão e transação da projeção. Participantes ativos podem incluir/editar os registros financeiros permitidos; continuam sem exclusão, alteração de renda pessoal ou privilégios administrativos. Catálogos de categorias dos grupos continuam sob gestão do administrador. A projeção inclui apenas campos explícitos do grupo e nunca inclui recebimentos pessoais, perfis, salários ou benefícios.
+Cadastros e movimentos de grupos usam o mesmo servidor autenticado, revisão e transação da projeção. Participantes ativos podem incluir/editar os registros financeiros permitidos; continuam sem exclusão, alteração de renda pessoal ou privilégios administrativos. Catálogos de categorias dos grupos continuam sob gestão do administrador. A projeção inclui apenas campos explícitos do grupo e nunca inclui recebimentos pessoais, perfis, salários ou créditos/saldos dos benefícios. A fonte VA/VR de uma despesa compartilhada é publicada como parte do próprio lançamento.
 
 Receitas e disponibilidade baseadas nos salários do administrador permanecem privadas. A visão anual de participantes mostra despesas e movimentos patrimoniais compartilhados; sugestões de distribuição baseadas na renda ficam privadas. A configuração da estratégia permanece compartilhada. O resumo pessoal e os compromissos pessoais incluem cotas dos grupos uma única vez. Projeções proporcionais sem renda futura conhecida são sinalizadas como incompletas, nunca apresentadas como uma previsão válida de zero.
 

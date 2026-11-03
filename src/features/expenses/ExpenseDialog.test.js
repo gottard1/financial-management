@@ -93,3 +93,20 @@ test('a preview for an older participant selection never crashes the expense dia
   assert.doesNotMatch(html, /Assim fica a divisão/);
   assert.match(html, /Atualizando a divisão/);
 });
+
+test('payment source is optional for old expenses and benefit payments identify the payer without changing the split', () => {
+  const { data, draft } = sharedExpense();
+  const old = render(data, draft, { a: 100000, b: 100000 });
+  assert.match(old, /value="cash" selected=""/);
+  assert.match(old, /value="foodAllowance"/);
+  assert.match(old, /value="mealAllowance"/);
+  const benefit = render(
+    data,
+    { ...draft, paymentSource: 'foodAllowance', status: 'pending' },
+    { a: 100000, b: 100000 },
+  );
+  assert.match(benefit, /Titular do vale/);
+  assert.match(benefit, /compromisso do vale/);
+  assert.match(benefit, /rateio e os acertos entre participantes continuam iguais/);
+  assert.match(benefit, /Assim fica a divisão/);
+});

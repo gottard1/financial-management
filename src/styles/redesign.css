@@ -1041,7 +1041,74 @@
   flex: 1;
 }
 
+.benefits-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.benefit-values {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0 0;
+}
+
+.benefit-values > div,
+.benefit-category-list > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.benefit-values dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.benefit-category-list,
+.benefit-expense-list {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.benefit-expense-list > li {
+  padding: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.benefit-expense-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 16px;
+}
+
+.benefit-expense-header > div {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.benefit-expense-header h3 {
+  margin: 0;
+}
+
+.benefit-expense-header p {
+  margin: 4px 0 0;
+}
+
+.benefit-expense-header .amount {
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
+  .benefits-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .app-page-content .content-stack,
   .app-page-content.content-stack {
     gap: 20px;

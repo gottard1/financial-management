@@ -2,7 +2,7 @@ import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { Icon } from '../../components/ui/Icon.jsx';
 
-export function MonthlySummary({ stats, mode, benefits, receiverId }) {
+export function MonthlySummary({ stats, mode, benefits, receiverId, go }) {
   const group = mode === 'group';
   const balance = stats.balances?.[receiverId] || 0;
   const label = group
@@ -31,6 +31,12 @@ export function MonthlySummary({ stats, mode, benefits, receiverId }) {
     : [
         ['Renda em dinheiro', stats.income],
         ['Despesas previstas', stats.total],
+        ...(stats.benefitExpenses
+          ? [
+              ['Parte coberta por VA/VR', stats.benefitExpenses],
+              ['Despesas em dinheiro', stats.cashExpenses],
+            ]
+          : []),
         ['Saldo antes dos aportes', stats.balanceBeforeContributions ?? stats.income - stats.total],
         ['Guardado no mês', stats.savingsThisMonth],
         ...(stats.investmentApplications
@@ -52,7 +58,7 @@ export function MonthlySummary({ stats, mode, benefits, receiverId }) {
           <small>
             {group
               ? 'O saldo considera somente recebimentos confirmados.'
-              : 'Após gastos pessoais, suas cotas nos grupos e aportes.'}
+              : 'Após gastos em dinheiro, suas cotas nos grupos e aportes. VA/VR fica separado.'}
           </small>
         </div>
         <div className="financial-hero-details">
@@ -69,15 +75,20 @@ export function MonthlySummary({ stats, mode, benefits, receiverId }) {
           )}
         </div>
       </section>
-      {!group && benefits?.total > 0 && (
+      {!group && (benefits?.total > 0 || stats.benefitExpenses > 0) && (
         <aside className="benefits-note">
           <div>
-            <strong>VA / VR do mês · {money(benefits.total)}</strong>
+            <strong>VA / VR do mês · {money(benefits?.total || 0)}</strong>
             <p>
-              VA: {money(benefits.foodAllowance)} · VR: {money(benefits.mealAllowance)}
+              VA: {money(benefits?.foodAllowance || 0)} · VR: {money(benefits?.mealAllowance || 0)}
             </p>
           </div>
           <small>Benefícios de alimentação, separados do dinheiro disponível.</small>
+          {go && (
+            <button className="button secondary" onClick={() => go('benefits')}>
+              Ver uso do VA / VR
+            </button>
+          )}
         </aside>
       )}
     </>

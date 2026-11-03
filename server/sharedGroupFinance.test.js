@@ -110,6 +110,54 @@ const bill = {
   split: 'proportional',
   percentages: {},
 };
+test('authorized benefit payments persist source and unchanged rateio atomically; outsiders and private credit edits remain forbidden', async () => {
+  const { execute, read, rows } = harness();
+  await assert.rejects(() =>
+    execute('stranger', {
+      action: 'upsert',
+      changes: [
+        { kind: 'expenses', id: 'food', value: { ...bill, paymentSource: 'foodAllowance' } },
+      ],
+    }),
+  );
+  await assert.rejects(
+    () =>
+      execute('member', {
+        action: 'upsert',
+        changes: [{ kind: 'expenses', id: 'food', value: { ...bill, paymentSource: 'unknown' } }],
+      }),
+    { status: 400 },
+  );
+  await assert.rejects(
+    () =>
+      execute('member', {
+        action: 'upsert',
+        changes: [{ kind: 'income', id: '2026-11', value: { foodAllowance: 99999 } }],
+      }),
+    { status: 400 },
+  );
+  assert.equal(read().revision, 1);
+  const result = await execute('member', {
+    action: 'upsert',
+    changes: [{ kind: 'expenses', id: 'food', value: { ...bill, paymentSource: 'foodAllowance' } }],
+  });
+  assert.equal(read().data.expenses[0].paymentSource, 'foodAllowance');
+  assert.deepEqual(read().data.months, { '2026-11': { a: 100000, b: 300000 } });
+  assert.deepEqual(result.snapshot.expenses[0].shares, { a: 2500, b: 7501 });
+  assert.equal(result.snapshot.overview['2026-11'].stats.cashExpenses, 0);
+  assert.equal(result.snapshot.incomeConfigs, undefined);
+  assert.equal(rows.get('sharedGroups/owner_home').financeRevision, 2);
+  await execute('member', {
+    revision: 2,
+    action: 'upsert',
+    changes: [{ kind: 'expenses', id: 'food', value: { paymentSource: 'cash' } }],
+  });
+  assert.equal(read().data.expenses[0].paymentSource, 'cash');
+  assert.equal(
+    rows.get('sharedGroups/owner_home').snapshot.overview['2026-11'].stats.cashExpenses,
+    10001,
+  );
+});
 test('shared variable recurring payments require the new month value and preserve the preceding amount', async () => {
   const { execute, read } = harness();
   await execute('member', {

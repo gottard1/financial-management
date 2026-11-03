@@ -2,6 +2,7 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createFinanceCloudStore } from '../../src/infrastructure/firebase/financeCloudStore.js';
+import { createFinanceSync } from '../../src/infrastructure/storage/financeSync.js';
 import { editSharedGroup } from '../../server/sharedGroupFinance.js';
 import { decodeFinance } from '../../src/domain/budget/financeCloudCodec.js';
 import {
@@ -45,6 +46,177 @@ const projectId = 'demo-financial-sharing';
 const groupId = 'admin_home';
 const inviteId = `${groupId}_person-b`;
 const memberId = `member_${groupId}`;
+test(
+  'VA/VR uses existing private expense records and monthly income configs with owner-only cloud access',
+  { skip: !enabled },
+  async () => {
+    const owner = context('benefit-owner'),
+      outsider = context('benefit-outsider');
+    const data = migrateData(null),
+      scope = 'person:person-0';
+    data.incomeConfigs = {
+      '2026-11': {
+        'person-0': { ...defaultIncomeConfig(300000), foodAllowance: 60000, mealAllowance: 30000 },
+      },
+    };
+    data.months = { '2026-11': { 'person-0': 300000 } };
+    data.expenses = [
+      {
+        id: 'food',
+        workspace: scope,
+        description: 'Mercado',
+        amount: 10001,
+        date: '2026-11-10',
+        category: 'Alimentação',
+        payer: 'person-0',
+        participants: ['person-0'],
+        status: 'paid',
+        split: 'equal',
+        paymentSource: 'foodAllowance',
+      },
+      {
+        id: 'meal',
+        workspace: scope,
+        description: 'Almoço',
+        amount: 1500,
+        date: '2026-11-11',
+        category: 'Alimentação',
+        payer: 'person-0',
+        participants: ['person-0'],
+        status: 'pending',
+        split: 'equal',
+        paymentSource: 'mealAllowance',
+      },
+    ];
+    const store = createFinanceCloudStore(owner, 'benefit-owner');
+    await assertSucceeds(store.save(data, null));
+    let docs = await getDocs(collection(owner, 'users', 'benefit-owner', 'finance'));
+    assert.deepEqual(
+      decodeFinance(docs.docs.map((d) => ({ ...d.data(), id: d.id }))).data,
+      migrateData(data),
+    );
+    await assertFails(getDoc(doc(outsider, 'users', 'benefit-owner', 'finance', 'expenses:food')));
+    await assertFails(
+      updateDoc(doc(outsider, 'users', 'benefit-owner', 'finance', 'expenses:food'), {
+        payload: '{}',
+      }),
+    );
+    data.expenses[0].paymentSource = 'cash';
+    await assertSucceeds(store.save(data, 1));
+    docs = await getDocs(collection(owner, 'users', 'benefit-owner', 'finance'));
+    assert.equal(
+      decodeFinance(docs.docs.map((d) => ({ ...d.data(), id: d.id }))).data.expenses[0]
+        .paymentSource,
+      'cash',
+    );
+  },
+);
+test(
+  'legacy rules reject new records without losing local data; updating rules lets the same pending copy sync safely',
+  { skip: !enabled },
+  async () => {
+    const project = 'demo-financial-legacy-policy';
+    const rules = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
+    let legacyRules = rules;
+    for (const kind of [
+      'cards',
+      'events',
+      'incomeEntries',
+      'reserveMovements',
+      'investments',
+      'investmentMovements',
+      'investmentValuations',
+    ])
+      legacyRules = legacyRules.replaceAll(`|${kind}`, '').replaceAll(`, '${kind}'`, '');
+    assert.notEqual(legacyRules, rules);
+    const legacy = await initializeTestEnvironment({
+      projectId: project,
+      firestore: { rules: legacyRules },
+    });
+    let upgraded, engine;
+    try {
+      const db = legacy
+        .authenticatedContext('policy-owner', {
+          email: 'owner@example.com',
+          email_verified: true,
+          firebase: { sign_in_provider: 'google.com' },
+        })
+        .firestore();
+      const store = createFinanceCloudStore(db, 'policy-owner'),
+        original = migrateData(null);
+      await store.save(original, null);
+      const pending = {
+        ...original,
+        cards: [
+          {
+            id: 'card',
+            scope: 'person:person-0',
+            name: 'Cartão',
+            closingDay: 31,
+            dueDay: 6,
+            dueMonthMode: 'next',
+          },
+        ],
+      };
+      let local = pending,
+        marker = { baseRevision: 1, dirty: true },
+        status,
+        error;
+      engine = createFinanceSync({
+        initialData: pending,
+        marker,
+        saveLocal: (next) => {
+          local = next;
+        },
+        saveMarker: (next) => {
+          marker = next;
+        },
+        archiveLocal: () => assert.fail('No conflict resolution should be necessary'),
+        saveRemote: (data, revision) => store.save(data, revision),
+        onData: () => {},
+        onStatus: (next) => {
+          status = next;
+        },
+        onError: (next) => {
+          error = next;
+        },
+      });
+      engine.receive({ revision: 1, data: original });
+      await engine.flush();
+      assert.equal(status, 'offline');
+      assert.equal(error.code, 'permission-denied');
+      assert.equal(marker.dirty, true);
+      assert.deepEqual(local, pending);
+      assert.equal(
+        (await getDoc(doc(db, 'users', 'policy-owner', 'finance', 'state'))).data().revision,
+        1,
+      );
+      assert.equal(
+        (await getDoc(doc(db, 'users', 'policy-owner', 'finance', 'cards:card'))).exists(),
+        false,
+      );
+      upgraded = await initializeTestEnvironment({ projectId: project, firestore: { rules } });
+      await engine.flush();
+      assert.equal(status, 'saved');
+      assert.equal(error, null);
+      assert.equal(marker.dirty, false);
+      assert.equal(marker.baseRevision, 2);
+      assert.deepEqual(local, pending);
+      assert.equal(
+        (await getDoc(doc(db, 'users', 'policy-owner', 'finance', 'cards:card'))).exists(),
+        true,
+      );
+      const outsider = upgraded
+        .authenticatedContext('outsider', { firebase: { sign_in_provider: 'google.com' } })
+        .firestore();
+      await assertFails(getDoc(doc(outsider, 'users', 'policy-owner', 'finance', 'cards:card')));
+    } finally {
+      engine?.stop();
+      await upgraded?.cleanup();
+      await legacy.cleanup();
+    }
+  },
+);
 test(
   'new private finance collections synchronize only for their owner and retain exact data',
   { skip: !enabled },

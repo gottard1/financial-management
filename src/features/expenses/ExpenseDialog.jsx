@@ -3,6 +3,11 @@ import React from 'react';
 import { money } from '../../domain/expenses/expenseCalculations.js';
 import { categoryOptions } from '../../domain/expenses/expenseCategories.js';
 import {
+  paymentSource,
+  paymentSources,
+  usesBenefit,
+} from '../../domain/benefits/benefitPayments.js';
+import {
   invoiceDates,
   installmentAmount,
   cardInvoicePeriod,
@@ -171,7 +176,7 @@ export function ExpenseDialog({
                 {(data.cards || [])
                   .filter((c) => c.scope === draft.workspace)
                   .map((c) => (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} disabled={usesBenefit(draft)}>
                       {c.name}
                     </option>
                   ))}
@@ -481,16 +486,40 @@ export function ExpenseDialog({
           <legend>Pagamento</legend>
           <div className="form-grid">
             <label className="field">
+              Fonte do pagamento
+              <select
+                value={paymentSource(draft)}
+                onChange={(e) => update('paymentSource', e.target.value)}
+              >
+                {Object.entries(paymentSources).map(([value, label]) => (
+                  <option
+                    key={value}
+                    value={value}
+                    disabled={value !== 'cash' && Boolean(draft.cardId)}
+                  >
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <small>
+                {draft.cardId
+                  ? 'Para usar VA/VR, selecione Sem cartão primeiro.'
+                  : 'VA/VR fica separado do dinheiro disponível.'}
+              </small>
+            </label>
+            <label className="field">
               Situação
               <select value={draft.status} onChange={(e) => update('status', e.target.value)}>
                 <option value="pending">Pendente</option>
                 <option value="paid">Já foi paga</option>
               </select>
             </label>
-            {draft.status === 'paid' &&
+            {(draft.status === 'paid' || usesBenefit(draft)) &&
               (shared ? (
                 <label className="field">
-                  Quem pagou o valor total?
+                  {usesBenefit(draft)
+                    ? 'Titular do vale / quem paga o total?'
+                    : 'Quem pagou o valor total?'}
                   <select value={draft.payer} onChange={(e) => update('payer', e.target.value)}>
                     {memberIds.map((id) => (
                       <option key={id} value={id}>
@@ -500,9 +529,22 @@ export function ExpenseDialog({
                   </select>
                 </label>
               ) : (
-                <p className="notice">Pagamento registrado por {nameOf(draft.payer)}.</p>
+                <p className="notice">
+                  {usesBenefit(draft) ? 'Vale de ' : 'Pagamento registrado por '}
+                  {nameOf(draft.payer)}.
+                </p>
               ))}
           </div>
+          {usesBenefit(draft) && (
+            <p className="notice">
+              {draft.status === 'paid'
+                ? 'O valor total será descontado do vale do pagador.'
+                : 'O valor ficará como compromisso do vale; o desconto ocorre ao marcar como paga.'}{' '}
+              {shared
+                ? 'O rateio e os acertos entre participantes continuam iguais. As outras pessoas mantêm suas cotas em dinheiro.'
+                : 'Esta despesa não desconta do seu dinheiro disponível.'}
+            </p>
+          )}
         </fieldset>
         <div className="notice expense-preview" aria-live="polite">
           {completePreview ? (

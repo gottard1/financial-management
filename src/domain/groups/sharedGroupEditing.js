@@ -13,6 +13,7 @@ const fields = {
     'category',
     'status',
     'payer',
+    'paymentSource',
     'participants',
     'split',
     'percentages',
@@ -134,6 +135,7 @@ export function sharedGroupChanges(previous, next) {
                     'eventId',
                     'essential',
                     'companion',
+                    'paymentSource',
                   ]
                     .filter((key) => Object.hasOwn(old || {}, key) && !Object.hasOwn(item, key))
                     .map((key) => [key, null]),
@@ -207,6 +209,7 @@ export function applySharedGroupChanges(input, groupId, changes) {
         'eventId',
         'essential',
         'companion',
+        'paymentSource',
       ])
         if (item[key] === null) delete item[key];
       const prior = existing ? [...existing.participants, existing.payer] : [];

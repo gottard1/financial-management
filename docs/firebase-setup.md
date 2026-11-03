@@ -115,6 +115,16 @@ Para reativar, abra **Editar grupo**, selecione a pessoa marcada como **Reativar
 
 Publique novamente `firestore.rules` antes de usar a remoção em produção; versões anteriores não autorizam a revogação de vínculos aceitos.
 
+### Erro de acesso após atualizar o aplicativo
+
+Um push do código ou um deploy do site não publica as regras do Firestore. A versão que adicionou cartões, eventos, recebimentos, reservas e investimentos ampliou a lista de tipos permitidos em `firestore.rules`. Se o site for atualizado e as regras publicadas continuarem na versão anterior, uma tentativa de gravar esses novos registros falha com `permission-denied` e mantém a alteração pendente no navegador.
+
+O aplicativo distingue esse código de indisponibilidade de rede, sessão recusada e limites de recursos, sem mostrar tokens ou conteúdo financeiro nos detalhes técnicos. O código indica a classe do erro; ele não comprova sozinho que a causa são regras antigas. Conta ou projeto incorretos também precisam ser conferidos.
+
+Para aplicar uma atualização autorizada das regras, selecione no Firebase Console o mesmo projeto usado pelo aplicativo, abra **Firestore Database → Regras**, revise o arquivo `firestore.rules` completo desta versão e publique-o. As permissões privadas por UID e os vínculos dos grupos devem continuar presentes; não substitua o arquivo por uma regra de acesso público. Depois use **Tentar sincronizar** na mesma conta e navegador. É possível **Exportar cópia local** diretamente no aviso de falha. Não é necessário apagar dados locais ou substituir a cópia pendente pela versão da nuvem para atualizar regras.
+
+O teste do emulador reproduz a recusa pelas regras anteriores, verifica a preservação da cópia local/revisão remota e confirma que a mesma alteração pendente é aceita após atualizar as regras, mantendo o bloqueio de outras contas.
+
 ### Validação local das permissões
 
 Com Java 21 ou superior disponível no PATH, execute `npm run test:rules`. O comando inicia o emulador com o projeto fictício `demo-financial-sharing`; não usa dados de produção. Os testes verificam isolamento entre contas, consulta de convites, bloqueio sem confirmação de e-mail, aceite atômico, preservação do ID do participante e proteção de vínculos aceitos. `npm test` executa os testes de domínio; os testes de regras são ignorados quando o emulador não está ativo.

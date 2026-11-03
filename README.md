@@ -125,7 +125,9 @@ Cada pessoa também pode informar, por mês:
 - **Outras entradas líquidas**, sem recalcular sua tributação.
 - **Vale-alimentação (VA)** e **vale-refeição (VR)**, registrados separadamente do dinheiro disponível.
 
-A renda em dinheiro é o líquido da renda principal mais os adicionais líquidos. Ela alimenta o orçamento e a proporção das contas. VA e VR aparecem como benefícios de alimentação: não aumentam o disponível em dinheiro, não alteram o rateio e não representam saldo remanescente do cartão, pois o consumo dos benefícios ainda não é acompanhado.
+A renda em dinheiro é o líquido da renda principal mais os adicionais líquidos. Ela alimenta o orçamento e a proporção das contas. VA e VR não aumentam o disponível em dinheiro nem alteram o rateio.
+
+Na despesa, escolha **Fonte do pagamento → VA ou VR** para descontar o valor do vale ao marcar a conta como paga. A aba individual **VA / VR** reúne valores informados, gastos, compromissos pendentes, restante do mês, categorias e lançamentos pessoais e dos grupos pagos com o seu vale. O gasto continua no consumo e no orçamento; a parte coberta pelo vale do titular não é descontada novamente do seu disponível em dinheiro. Nos grupos, os acertos continuam iguais e o vale utilizado é o do pagador, sem publicar seus créditos ou saldos. O controle é mensal, sem transferência automática de sobras entre meses. Veja [VA/VR e fontes de pagamento](docs/va-vr.md).
 
 Os adicionais devem ser informados sem repetir valores já incluídos na renda principal. Um bônus bruto ou de natureza tributária especial precisa ser convertido para o líquido antes do registro; o aplicativo não presume que bonificações sejam isentas. Descontos de participação no VA/VR podem ser informados em outros descontos, caso ainda não estejam na renda líquida registrada.
 
