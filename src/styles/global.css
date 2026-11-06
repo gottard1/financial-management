@@ -2069,6 +2069,12 @@ dialog {
   }
 }
 @media (max-width: 760px) {
+  * {
+    scrollbar-width: none;
+  }
+  ::-webkit-scrollbar {
+    display: none;
+  }
   .app-shell {
     display: block;
   }
