@@ -162,7 +162,10 @@ function FinanceApp({ storageNamespace }) {
     statsError = '';
   try {
     if (scope) {
-      stats = calculateWorkspace(data, month, scope, data.months[month] || {});
+      stats = calculateWorkspace(data, month, scope, data.months[month] || {}, {
+        remoteGroups: sharedGroups,
+        accountUid: user?.uid,
+      });
       benefits = sumRestrictedBenefits(memberIds.map((id) => profiles[id]));
     }
   } catch (err) {
@@ -951,6 +954,8 @@ function FinanceApp({ storageNamespace }) {
               {tab === 'overview' && stats && (
                 <MonthlyOverview
                   {...{ stats, mode, benefits, plan, data, go, scope, month }}
+                  sharingLoading={sharedGroupsLoading}
+                  sharingError={sharingError}
                   commitData={receiptsLoading ? undefined : commitData}
                   onReport={reportPayment}
                   pendingReports={currentReports.filter((item) => item.status === 'pending')}

@@ -168,6 +168,86 @@ test('individual overview includes its own costs plus its shares across all grou
   assert.deepEqual(result.paidBy, { [p0]: 0 });
 });
 
+function invitedGroup(expenses) {
+  return {
+    id: 'other-owner_group-a',
+    adminUid: 'other-owner',
+    membership: { groupId: 'other-owner_group-a', personId: p2 },
+    snapshot: {
+      id: 'group-a',
+      name: 'Viagem',
+      people: [{ id: p1 }, { id: p2 }],
+      activeMemberIds: [p1, p2],
+      expenses,
+    },
+  };
+}
+
+test('individual overview includes published guest shares once and applies VA/VR to the linked payer', () => {
+  const model = data({ expenses: [expense()] });
+  const remote = invitedGroup([
+    expense({
+      id: 'pending',
+      participants: [p1, p2],
+      payer: p1,
+      status: 'pending',
+      category: 'Viagens',
+      shares: { [p1]: 84999, [p2]: 15001 },
+    }),
+    expense({
+      id: 'benefit',
+      participants: [p1, p2],
+      payer: p2,
+      category: 'Alimentação',
+      paymentSource: 'foodAllowance',
+      shares: { [p1]: 95000, [p2]: 5000 },
+    }),
+    expense({ id: 'unrelated', participants: [p1], payer: p1, shares: { [p1]: 100000 } }),
+    expense({
+      id: 'next-invoice',
+      participants: [p1, p2],
+      payer: p1,
+      cardId: 'card',
+      invoiceMonth: '2026-11',
+      shares: { [p1]: 50000, [p2]: 50000 },
+    }),
+  ]);
+  const ownProjection = {
+    ...remote,
+    id: 'me_group-a',
+    adminUid: 'me',
+    membership: { groupId: 'me_group-a', personId: p2 },
+  };
+  const result = calculateWorkspace(model, '2026-10', 'person:' + p0, incomes, {
+    remoteGroups: [remote, remote, ownProjection],
+    accountUid: 'me',
+  });
+  assert.equal(result.total, 80001);
+  assert.equal(result.sharedShareTotal, 80001);
+  assert.equal(result.paid, 65000);
+  assert.equal(result.pending, 15001);
+  assert.equal(result.cashExpenses, 75001);
+  assert.equal(result.benefitExpenses, 5000);
+  assert.equal(result.available, 224999);
+  assert.deepEqual(result.categories, { Moradia: 60000, Viagens: 15001, Alimentação: 5000 });
+});
+
+test('individual overview flags unavailable guest shares and excludes inactive memberships', () => {
+  const model = data({ expenses: [expense()] });
+  const remote = invitedGroup([expense({ participants: [p1, p2], payer: p1 })]);
+  const calculate = () =>
+    calculateWorkspace(model, '2026-10', 'person:' + p0, incomes, { remoteGroups: [remote] });
+  const partial = calculate();
+  assert.equal(partial.total, 60000);
+  assert.equal(partial.sharedSharesIncomplete, true);
+
+  remote.snapshot.activeMemberIds = [p1];
+  remote.snapshot.expenses[0].shares = { [p1]: 95000, [p2]: 5000 };
+  const inactive = calculate();
+  assert.equal(inactive.total, 60000);
+  assert.equal(inactive.sharedSharesIncomplete, false);
+});
+
 test('group overview isolates its own expenses and incomes while retaining settlement', () => {
   const model = data({
     groups: [...data().groups, { id: 'other', name: 'Outro', memberIds: [p0, p2] }],

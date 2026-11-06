@@ -1,4 +1,5 @@
 import { splitExpense, summarize } from '../expenses/expenseCalculations.js';
+import { invitedExpenseRows } from '../expenses/consolidatedExpenses.js';
 import { cashExpenseShare, usesBenefit } from '../benefits/benefitPayments.js';
 import { validateInstallments } from '../expenses/recurringExpenses.js';
 import { validatePaymentReport } from '../settlements/paymentReports.js';
@@ -502,7 +503,13 @@ export function migrateData(input) {
   return result;
 }
 
-export function calculateWorkspace(data, month, scope, incomes) {
+export function calculateWorkspace(
+  data,
+  month,
+  scope,
+  incomes,
+  { remoteGroups = [], accountUid } = {},
+) {
   monthKey(month);
   record(incomes, 'Rendas');
   Object.values(incomes).forEach((value) => cents(value, 'Renda'));
@@ -518,7 +525,8 @@ export function calculateWorkspace(data, month, scope, incomes) {
     income,
     cashExpenses = 0,
     expensePersonalTotal = 0,
-    sharedShareTotal = 0;
+    sharedShareTotal = 0,
+    sharedSharesIncomplete = false;
   if (scope.startsWith('group:')) {
     const shared = currentExpenses.filter((expense) => expense.workspace === scope);
     stats = applySettlements(
@@ -540,18 +548,30 @@ export function calculateWorkspace(data, month, scope, incomes) {
     expensePersonalTotal = personalStats.total;
     cashExpenses = sum(personal.map((e) => cashExpenseShare(e, owner, e.amount)));
     let sharedPaid = 0;
+    const addShare = (amount, cashAmount, status, category) => {
+      cashExpenses = sum([cashExpenses, cashAmount]);
+      sharedShareTotal = sum([sharedShareTotal, amount]);
+      if (status === 'paid') sharedPaid = sum([sharedPaid, amount]);
+      else if (status !== 'pending') throw new Error('Situação da conta inválida.');
+      addCategory(category, amount);
+    };
     for (const group of data.groups.filter((item) => item.memberIds.includes(owner))) {
       for (const expense of currentExpenses.filter(
         (item) => item.workspace === 'group:' + group.id,
       )) {
         if (!expense.participants.includes(owner)) continue;
         const amount = splitExpense(expense, incomes, group.memberIds)[owner] ?? 0;
-        cashExpenses = sum([cashExpenses, cashExpenseShare(expense, owner, amount)]);
-        sharedShareTotal = sum([sharedShareTotal, amount]);
-        if (expense.status === 'paid') sharedPaid = sum([sharedPaid, amount]);
-        else if (expense.status !== 'pending') throw new Error('Situação da conta inválida.');
-        addCategory(expense.category, amount);
+        addShare(
+          amount,
+          cashExpenseShare(expense, owner, amount),
+          expense.status,
+          expense.category,
+        );
       }
+    }
+    for (const row of invitedExpenseRows(data, month, remoteGroups, accountUid)) {
+      if (row.error) sharedSharesIncomplete = true;
+      else if (row.ownAmount > 0) addShare(row.ownAmount, row.cashAmount, row.status, row.category);
     }
     const total = sum([expensePersonalTotal, sharedShareTotal]);
     const paid = sum([personalStats.paid, sharedPaid]);
@@ -607,5 +627,6 @@ export function calculateWorkspace(data, month, scope, incomes) {
     ),
     expensePersonalTotal,
     sharedShareTotal,
+    sharedSharesIncomplete,
   };
 }

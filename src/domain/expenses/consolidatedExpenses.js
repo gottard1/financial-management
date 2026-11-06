@@ -2,55 +2,48 @@ import { splitExpense } from './expenseCalculations.js';
 import { cashExpenseShare } from '../benefits/benefitPayments.js';
 import { expenseMonth, monthlyIncomes, total } from '../finance/extendedFinance.js';
 
-/** Read-only union. Never copies a group expense into personal storage. */
-export function consolidatedExpenses(data, personId, month, remoteGroups = [], accountUid) {
-  const rows = [],
-    personalScope = `person:${personId}`;
-  function add(expense, owner, group, remote = false) {
-    if (expenseMonth(expense) !== month) return;
-    if (group && !expense.participants.includes(owner) && expense.payer !== owner) return;
-    let ownAmount = expense.amount,
-      error = '';
-    if (group) {
-      if (!expense.participants.includes(owner)) ownAmount = 0;
-      else
-        try {
-          ownAmount = remote
-            ? expense.shares?.[owner]
-            : splitExpense(expense, monthlyIncomes(data, month), group.memberIds)[owner];
-          if (!Number.isSafeInteger(ownAmount) || ownAmount < 0)
-            throw new Error('A cota compartilhada ainda não está disponível. Atualize o grupo.');
-        } catch (e) {
-          ownAmount = null;
-          error = e.message;
-        }
-    }
-    rows.push({
-      key: `${remote ? 'remote' : 'local'}:${group?.id || personalScope}:${expense.id}`,
-      expense,
-      description: expense.description,
-      category: expense.category || 'Outros',
-      date: expense.date,
-      month: expenseMonth(expense),
-      status: expense.status,
-      essential: expense.essential === true,
-      totalAmount: expense.amount,
-      ownAmount,
-      cashAmount: ownAmount === null ? null : cashExpenseShare(expense, owner, ownAmount),
-      payerIsMe: expense.payer === owner,
-      error,
-      paidByMe: expense.status === 'paid' && expense.payer === owner ? expense.amount : 0,
-      kind: group ? 'group' : 'personal',
-      origin: group?.name || 'Pessoal',
-      originKey: group ? `${remote ? 'remote' : 'local'}:${group.id}` : 'personal',
-      groupId: group?.id || '',
-    });
+function expenseRow(expense, month, owner, { group, remote = false, getIncomes } = {}) {
+  if (expenseMonth(expense) !== month) return;
+  if (group && !expense.participants.includes(owner) && expense.payer !== owner) return;
+  let ownAmount = expense.amount,
+    error = '';
+  if (group) {
+    if (!expense.participants.includes(owner)) ownAmount = 0;
+    else
+      try {
+        ownAmount = remote
+          ? expense.shares?.[owner]
+          : splitExpense(expense, getIncomes(), group.memberIds)[owner];
+        if (!Number.isSafeInteger(ownAmount) || ownAmount < 0)
+          throw new Error('A cota compartilhada ainda não está disponível. Atualize o grupo.');
+      } catch (e) {
+        ownAmount = null;
+        error = e.message;
+      }
   }
-  data.expenses.filter((e) => e.workspace === personalScope).forEach((e) => add(e, personId));
-  for (const group of data.groups.filter((g) => g.memberIds.includes(personId)))
-    data.expenses
-      .filter((e) => e.workspace === `group:${group.id}`)
-      .forEach((e) => add(e, personId, group));
+  return {
+    key: `${remote ? 'remote' : 'local'}:${group?.id || `person:${owner}`}:${expense.id}`,
+    expense,
+    description: expense.description,
+    category: expense.category || 'Outros',
+    date: expense.date,
+    month,
+    status: expense.status,
+    essential: expense.essential === true,
+    totalAmount: expense.amount,
+    ownAmount,
+    cashAmount: ownAmount === null ? null : cashExpenseShare(expense, owner, ownAmount),
+    payerIsMe: expense.payer === owner,
+    error,
+    paidByMe: expense.status === 'paid' && expense.payer === owner ? expense.amount : 0,
+    kind: group ? 'group' : 'personal',
+    origin: group?.name || 'Pessoal',
+    originKey: group ? `${remote ? 'remote' : 'local'}:${group.id}` : 'personal',
+    groupId: group?.id || '',
+  };
+}
+
+export function* invitedExpenseRows(data, month, remoteGroups, accountUid) {
   const seen = new Set();
   for (const remote of remoteGroups) {
     if (seen.has(remote.id)) continue;
@@ -72,8 +65,26 @@ export function consolidatedExpenses(data, personId, month, remoteGroups = [], a
     )
       continue;
     const group = { id: remote.id, name: snapshot.name };
-    snapshot.expenses.forEach((e) => add(e, member.personId, group, true));
+    for (const expense of snapshot.expenses) {
+      const row = expenseRow(expense, month, member.personId, { group, remote: true });
+      if (row) yield row;
+    }
   }
+}
+
+/** Read-only union. Never copies a group expense into personal storage. */
+export function consolidatedExpenses(data, personId, month, remoteGroups = [], accountUid) {
+  const rows = [],
+    personalScope = `person:${personId}`;
+  const getIncomes = () => monthlyIncomes(data, month);
+  function add(expense, group) {
+    const row = expenseRow(expense, month, personId, { group, getIncomes });
+    if (row) rows.push(row);
+  }
+  data.expenses.filter((e) => e.workspace === personalScope).forEach((e) => add(e));
+  for (const group of data.groups.filter((g) => g.memberIds.includes(personId)))
+    data.expenses.filter((e) => e.workspace === `group:${group.id}`).forEach((e) => add(e, group));
+  for (const row of invitedExpenseRows(data, month, remoteGroups, accountUid)) rows.push(row);
   return rows.sort(
     (a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description),
   );

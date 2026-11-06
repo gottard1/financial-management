@@ -88,6 +88,9 @@ export function OverviewPanel({
                   <strong>{money(stats.sharedShareTotal)}</strong>
                 </li>
               </ul>
+              <button type="button" className="text-button" onClick={() => go('allExpenses')}>
+                Ver todas as despesas
+              </button>
             </section>
           )}
           <div className="overview-progress">
