@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { WorkspaceNavigation } from '../../components/layout/WorkspaceNavigation.jsx';
 import { MonthlyOverview } from '../overview/MonthlyOverview.jsx';
 import { ExpenseList } from '../expenses/ExpenseList.jsx';
 import { ExpenseDialog } from '../expenses/ExpenseDialog.jsx';
@@ -65,7 +66,8 @@ export function SharedGroupWorkspace({
   onRespond,
 }) {
   const [localTab, setTab] = useState('overview');
-  const selectedTab = ['groups', 'members'].includes(tab) ? 'groups' : onNavigate ? tab : localTab;
+  const activeTab = onNavigate || tab === 'groups' || tab === 'members' ? tab : localTab;
+  const selectedTab = activeTab === 'members' ? 'groups' : activeTab;
   const go = onNavigate || setTab;
   const [filter, setFilter] = useState('all');
   const [draft, setDraft] = useState(null);
@@ -260,7 +262,7 @@ export function SharedGroupWorkspace({
   };
   return (
     <>
-      {selectedTab !== 'groups' && (
+      {!onNavigate && tab !== 'groups' && (
         <p className="shared-workspace-context">
           <span className="pill">Participante</span>
           Você participa como{' '}
@@ -269,26 +271,8 @@ export function SharedGroupWorkspace({
           .
         </p>
       )}
-      {!onNavigate && selectedTab !== 'groups' && (
-        <nav className="group-subnav" aria-label="Seções do grupo compartilhado">
-          {[
-            ['overview', 'Visão do grupo'],
-            ['expenses', 'Despesas'],
-            ['budget', 'Orçamento'],
-            ['categories', 'Categorias'],
-            ['savings', 'Metas e reservas'],
-            ['settlements', 'Repasses e comprovantes'],
-            ['comparison', 'Comparar meses'],
-          ].map(([id, title]) => (
-            <button
-              key={id}
-              className={'button ' + (id === selectedTab ? 'primary' : 'secondary')}
-              onClick={() => go(id)}
-            >
-              {title}
-            </button>
-          ))}
-        </nav>
+      {!onNavigate && tab !== 'groups' && tab !== 'members' && (
+        <WorkspaceNavigation mode="group" tab={activeTab} onNavigate={go} />
       )}
       {notice && (
         <p className="notice" role="status">
@@ -306,7 +290,13 @@ export function SharedGroupWorkspace({
           <FinanceSetupPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
         )}
         {selectedTab === 'investments' && (
-          <InvestmentsPanel {...common} setData={setData} notify={setNotice} canDelete={false} />
+          <InvestmentsPanel
+            key={scope + month}
+            {...common}
+            setData={setData}
+            notify={setNotice}
+            canDelete={false}
+          />
         )}
         {selectedTab === 'annual' && <AnnualPanel {...common} snapshot={snapshot} />}
         {selectedTab === 'groups' && (

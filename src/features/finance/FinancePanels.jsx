@@ -64,6 +64,7 @@ const labels = {
 
 /** Shared editor persists through the same local/sync or authenticated group adapter. */
 function RecordsEditor({
+  id,
   data,
   setData,
   scope,
@@ -116,7 +117,7 @@ function RecordsEditor({
     }
   }
   return (
-    <section className="panel finance-panel">
+    <section className="panel finance-panel" id={id}>
       <h2>{title}</h2>
       {help && <p className="muted">{help}</p>}
       <form
@@ -606,24 +607,27 @@ export function InvestmentsPanel(props) {
     options = assets.map((a) => [a.id, a.name]);
   const summary = assetSummary(data, scope, asOf),
     goals = goalOptions(data, scope);
+  const wealthLabel = scope.startsWith('group:') ? 'Patrimônio do grupo' : 'Patrimônio pessoal';
   return (
-    <>
-      <section className="panel">
-        <h2>Patrimônio por data</h2>
-        <label className="field">
-          Posição em
-          <input
-            type="date"
-            value={asOf}
-            required
-            onChange={(e) => e.target.value && setAsOf(e.target.value)}
-          />
-        </label>
+    <div className="content-stack">
+      <section className="panel investment-summary">
+        <div className="panel-heading">
+          <h2>Patrimônio por data</h2>
+          <label className="field">
+            Posição em
+            <input
+              type="date"
+              value={asOf}
+              required
+              onChange={(e) => e.target.value && setAsOf(e.target.value)}
+            />
+          </label>
+        </div>
         <div className="summary-grid summary-grid--three">
           {[
             ['Reservas', summary.reserveTotal],
             ['Investimentos', summary.invested],
-            ['Patrimônio neste espaço', summary.wealth],
+            [wealthLabel, summary.wealth],
           ].map(([name, value]) => (
             <article className="card summary-card" key={name}>
               <p>{name}</p>
@@ -631,15 +635,69 @@ export function InvestmentsPanel(props) {
             </article>
           ))}
         </div>
-        <p className="hint">
-          As posições são manuais. Não há operações financeiras reais nem consulta a corretoras. Não
-          some patrimônios de espaços pessoais e grupos como se fossem independentes.
-        </p>
+        <p className="hint">Os valores refletem os registros e avaliações até a data escolhida.</p>
+        <div className="actions">
+          <a className="button secondary" href="#investment-assets">
+            Cadastrar ativo
+          </a>
+          {assets.length > 0 && (
+            <>
+              <a className="button secondary" href="#investment-movements">
+                Registrar movimento
+              </a>
+              <a className="button secondary" href="#investment-valuations">
+                Registrar avaliação
+              </a>
+            </>
+          )}
+        </div>
       </section>
+      {summary.positions.length > 0 && (
+        <section className="panel">
+          <h2>Posições por ativo</h2>
+          <div className="investment-positions">
+            {summary.positions.map((p) => (
+              <details className="investment-position" key={p.id}>
+                <summary>
+                  <strong>{p.name}</strong> · {money(p.current)}
+                </summary>
+                <p className="muted">{p.institution}</p>
+                <dl>
+                  {[
+                    ['Aplicado', p.applied],
+                    ['Resgatado', p.withdrawn],
+                    ['Rendimentos realizados brutos', p.yields],
+                    ['Taxas', p.fees],
+                    ['Impostos', p.taxes],
+                    ['Ganhos realizados em resgates', p.realizedGains],
+                    ['Perdas realizadas em resgates', p.realizedLosses],
+                    [
+                      'Resultado realizado líquido',
+                      total([p.yields, p.realizedGains, -p.realizedLosses, -p.fees, -p.taxes]),
+                    ],
+                    ['Ajuste por avaliação', p.unrealized],
+                  ].map(([name, value]) => (
+                    <div key={name}>
+                      <dt>{name}</dt>
+                      <dd>{money(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <small>
+                  {p.valuation
+                    ? `Avaliação manual de ${dateText(p.valuation.date)}. Inclui movimentos posteriores.`
+                    : 'Valor calculado pelos movimentos registrados.'}
+                </small>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
       <RecordsEditor
         {...props}
+        id="investment-assets"
         kind="investments"
-        title="Cadastrar ativo ou posição"
+        title="Cadastrar ativo"
         fields={[
           { name: 'name', label: 'Nome do ativo', required: true },
           {
@@ -659,45 +717,11 @@ export function InvestmentsPanel(props) {
         ]}
         help="Cadastre novos tipos na aba Categorias. Vincular a um objetivo organiza o progresso; não cria um segundo aporte."
       />
-      {summary.positions.map((p) => (
-        <section className="panel" key={p.id}>
-          <h3>
-            {p.name} · {p.institution}
-          </h3>
-          <div className="form-grid">
-            {[
-              ['Aplicado', p.applied],
-              ['Resgatado', p.withdrawn],
-              ['Rendimentos realizados brutos', p.yields],
-              ['Taxas', p.fees],
-              ['Impostos', p.taxes],
-              ['Ganhos realizados em resgates', p.realizedGains],
-              ['Perdas realizadas em resgates', p.realizedLosses],
-              [
-                'Resultado realizado líquido',
-                total([p.yields, p.realizedGains, -p.realizedLosses, -p.fees, -p.taxes]),
-              ],
-              ['Valor atual', p.current],
-              ['Ajuste por avaliação (separado do realizado)', p.unrealized],
-            ].map(([name, value]) => (
-              <p key={name}>
-                {name}
-                <br />
-                <strong>{money(value)}</strong>
-              </p>
-            ))}
-          </div>
-          <small>
-            {p.valuation
-              ? `Avaliação manual de ${p.valuation.date}; inclui movimentos posteriores à data.`
-              : 'Sem avaliação: valor calculado pelos movimentos registrados.'}
-          </small>
-        </section>
-      ))}
       {assets.length > 0 && (
         <>
           <RecordsEditor
             {...props}
+            id="investment-movements"
             kind="investmentMovements"
             title="Registrar movimento de investimento"
             fields={[
@@ -743,8 +767,9 @@ export function InvestmentsPanel(props) {
           />
           <RecordsEditor
             {...props}
+            id="investment-valuations"
             kind="investmentValuations"
-            title="Avaliação atual manual"
+            title="Registrar avaliação manual"
             fields={[
               {
                 name: 'investmentId',
@@ -764,7 +789,7 @@ export function InvestmentsPanel(props) {
           />
         </>
       )}
-    </>
+    </div>
   );
 }
 

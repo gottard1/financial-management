@@ -1,36 +1,28 @@
 import React from 'react';
 
+const sections = [
+  ['overview', 'Visão geral'],
+  ['expenses', 'Despesas'],
+  ['allExpenses', 'Todas as despesas', 'individual'],
+  ['benefits', 'VA / VR', 'individual'],
+  ['comparison', 'Análises'],
+  ['budget', 'Orçamento'],
+  ['categories', 'Categorias'],
+  ['savings', 'Metas e reservas'],
+  ['incomeEntries', 'Receitas', 'individual'],
+  ['financeSetup', 'Faturas e eventos'],
+  ['investments', 'Investimentos'],
+  ['annual', 'Visão anual'],
+  ['settlements', 'Acertos', 'group'],
+  ['members', 'Participantes', 'group'],
+  ['settings', 'Configurações', 'administrator'],
+];
+
 export function WorkspaceNavigation({ mode, tab, onNavigate, administrator }) {
-  const items =
-    mode === 'group'
-      ? [
-          ['settlements', 'Acertos'],
-          ['expenses', 'Despesas'],
-          ['comparison', 'Análises'],
-          ['budget', 'Orçamento'],
-          ['categories', 'Categorias'],
-          ['savings', 'Metas'],
-          ['financeSetup', 'Faturas e eventos'],
-          ['investments', 'Investimentos'],
-          ['annual', 'Visão anual'],
-          ['members', 'Participantes'],
-          ...(administrator ? [['settings', 'Configurações']] : []),
-          ['overview', 'Visão geral'],
-        ]
-      : [
-          ['overview', 'Visão geral'],
-          ['expenses', 'Despesas'],
-          ['allExpenses', 'Todas as despesas'],
-          ['benefits', 'VA / VR'],
-          ['comparison', 'Análises'],
-          ['budget', 'Orçamento'],
-          ['categories', 'Categorias'],
-          ['savings', 'Metas e reservas'],
-          ['incomeEntries', 'Receitas'],
-          ['financeSetup', 'Faturas e eventos'],
-          ['investments', 'Investimentos'],
-          ['annual', 'Visão anual'],
-        ];
+  const canConfigure = mode === 'group' && administrator;
+  const items = sections.filter(
+    ([, , access]) => !access || access === mode || (access === 'administrator' && canConfigure),
+  );
   return (
     <div className="workspace-navigation">
       <label className="mobile-section-picker">

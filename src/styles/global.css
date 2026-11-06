@@ -3428,12 +3428,6 @@ dialog {
 .account-bar .button {
   flex-shrink: 0;
 }
-.group-subnav {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 0 0 24px;
-}
 .participant-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3484,15 +3478,6 @@ dialog {
   .account-bar .button {
     padding: 10px 12px;
     font-size: 0.7rem;
-  }
-  .group-subnav {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .group-subnav .button {
-    padding: 10px;
-    font-size: 0.72rem;
   }
   .participant-list {
     grid-template-columns: 1fr;

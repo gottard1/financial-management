@@ -150,6 +150,9 @@ function FinanceApp({ storageNamespace }) {
   const selectedGroupId = sharedGroup?.id || group?.id || sharedGroups[0]?.id || '';
   const selectedSharedGroup =
     mode === 'group' && sharedGroups.find((item) => item.id === selectedGroupId);
+  const participantName = selectedSharedGroup?.snapshot?.people.find(
+    (item) => item.id === selectedSharedGroup.membership.personId,
+  )?.name;
   const scope = mode === 'group' ? (group ? 'group:' + group.id : '') : 'person:' + person;
   const memberIds = mode === 'group' ? group?.memberIds || [] : [person];
   const activeMemberIds = mode === 'group' ? activeGroupMembers(group) : [person];
@@ -176,7 +179,7 @@ function FinanceApp({ storageNamespace }) {
   }, [draft === null]);
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [tab]);
+  }, [tab, mode, groupId]);
   useEffect(() => {
     if (personId !== person) setPerson(person);
   }, [personId, person]);
@@ -360,7 +363,7 @@ function FinanceApp({ storageNamespace }) {
   };
   const financialPage = !['people', 'groups', 'account', 'notifications'].includes(tab);
   const titles = {
-    overview: 'Clareza para o seu mês.',
+    overview: 'Visão geral',
     expenses: 'Despesas',
     allExpenses: 'Todas as minhas despesas',
     benefits: 'VA / VR',
@@ -383,8 +386,15 @@ function FinanceApp({ storageNamespace }) {
   const pageTitle = titles[tab] || 'Meu financeiro';
   const pageDescription =
     {
-      overview: 'Suas contas em ordem. Seus planos em movimento.',
+      overview:
+        mode === 'group'
+          ? 'Acompanhe as despesas, as reservas e os acertos do grupo.'
+          : 'Acompanhe suas despesas, suas reservas e o saldo previsto do mês.',
       expenses: 'Cada conta no seu lugar, com pagamentos separados.',
+      investments:
+        mode === 'group'
+          ? 'Acompanhe as posições e os movimentos do grupo.'
+          : 'Acompanhe suas posições e seus movimentos.',
       categories: 'Organize os tipos de gasto para acompanhar melhor seu dinheiro.',
       people: 'Seus dados pessoais, renda e benefícios ficam privados.',
       notifications: 'O que precisa da sua atenção em todos os seus grupos.',
@@ -520,7 +530,7 @@ function FinanceApp({ storageNamespace }) {
         onSelectSpace={(nextMode, id) => {
           setMode(nextMode);
           if (id) setGroupId(id);
-          go(nextMode === 'group' ? 'settlements' : 'overview');
+          go('overview');
         }}
         userName={
           data.people.find((item) => item.accountUid === user?.uid)?.name ||
@@ -562,22 +572,17 @@ function FinanceApp({ storageNamespace }) {
             <p className="eyebrow">
               {financialPage
                 ? mode === 'group'
-                  ? 'Espaço compartilhado'
+                  ? 'Espaço compartilhado' + (participantName ? ` · ${participantName}` : '')
                   : 'Espaço individual · privado'
                 : 'Minha conta'}
             </p>
-            <h1>
-              {financialPage && mode === 'group'
-                ? selectedSharedGroup?.name || group?.name || pageTitle
-                : pageTitle}
-            </h1>
-            <p className="muted">
-              {financialPage && mode === 'group'
-                ? 'Contas organizadas. Acertos transparentes.'
-                : pageDescription}
-            </p>
+            <h1>{pageTitle}</h1>
+            <p className="muted">{pageDescription}</p>
           </div>
           {financialPage && mode === 'individual' && <span className="pill">Só você</span>}
+          {financialPage && mode === 'group' && (selectedSharedGroup || group) && (
+            <span className="pill">{selectedSharedGroup ? 'Participante' : 'Administrador'}</span>
+          )}
         </header>
         {financialPage && (
           <WorkspaceNavigation
@@ -614,10 +619,7 @@ function FinanceApp({ storageNamespace }) {
             />
           </div>
         )}
-        <div
-          className={'app-page-content' + (mode === 'group' ? ' content-stack' : '')}
-          inert={blocked ? true : undefined}
-        >
+        <div className="app-page-content content-stack" inert={blocked ? true : undefined}>
           {financialPage && mode === 'individual' && localMode && selectablePeople.length > 1 && (
             <label className="field local-person-picker">
               Pessoa no modo local
