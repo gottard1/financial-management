@@ -13,6 +13,41 @@ import { expenseMonth, monthlyIncomes } from '../src/domain/finance/extendedFina
 
 const problem = (status, message) => Object.assign(new Error(message), { status });
 
+const previewCaches = new WeakMap();
+const maxPreviewAccounts = 4;
+const maxPreviewPayloadBytes = 4 * 1024 * 1024;
+
+function previewCacheFor(db) {
+  if (!previewCaches.has(db)) previewCaches.set(db, new Map());
+  return previewCaches.get(db);
+}
+
+async function readFinance(transaction, ref, previewCache) {
+  const cached = previewCache?.get(ref.path);
+  if (cached) {
+    // Every financial write updates state in the same transaction as the records.
+    const state = await transaction.get(ref.doc('state'));
+    if (state.updateTime?.isEqual(cached.updateTime))
+      return { records: cached.records, finance: decodeFinance(cached.records) };
+    previewCache.delete(ref.path);
+  }
+
+  const { docs } = await transaction.get(ref);
+  const records = docs.map((item) => ({ ...item.data(), id: item.id }));
+  const finance = decodeFinance(records);
+  if (previewCache && finance) {
+    const updateTime = docs.find((item) => item.id === 'state')?.updateTime;
+    const bytes = records.reduce((size, item) => size + Buffer.byteLength(item.payload ?? ''), 0);
+    if (updateTime && bytes <= maxPreviewPayloadBytes) {
+      previewCache.delete(ref.path);
+      if (previewCache.size >= maxPreviewAccounts)
+        previewCache.delete(previewCache.keys().next().value);
+      previewCache.set(ref.path, { records, updateTime });
+    }
+  }
+  return { records, finance };
+}
+
 /** Membership, private records and public projection are checked and committed atomically. */
 export async function editSharedGroup({ db, timestamp, uid, command }) {
   const ref = db.collection('sharedGroups').doc(command.groupId);
@@ -56,11 +91,11 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
     if (['report-payment', 'confirm-payment', 'reject-payment'].includes(command.action))
       return editGroupPayment({ db, transaction, ref, group, actorId, uid, command, timestamp });
     const financeRef = db.collection('users').doc(group.adminUid).collection('finance');
-    const records = (await transaction.get(financeRef)).docs.map((item) => ({
-      ...item.data(),
-      id: item.id,
-    }));
-    const finance = decodeFinance(records);
+    const { records, finance } = await readFinance(
+      transaction,
+      financeRef,
+      command.action === 'preview' ? previewCacheFor(db) : undefined,
+    );
     if (!finance) throw problem(409, 'Aguarde o administrador sincronizar os dados financeiros.');
     const groupId = group.snapshot.id;
     let next = finance.data;

@@ -50,18 +50,24 @@ function harness() {
     doc: (id) => ref(`${path}/${id || crypto.randomUUID()}`),
     collection: (id) => ref(`${path}/${id}`, true),
   });
-  const snapshot = (path) => ({
-    id: path.split('/').at(-1),
-    exists: rows.has(path),
-    data: () => rows.get(path),
-  });
+  const snapshot = (path) => {
+    const value = rows.get(path);
+    return {
+      id: path.split('/').at(-1),
+      exists: rows.has(path),
+      data: () => value,
+      updateTime: value && { version: value, isEqual: (other) => other.version === value },
+    };
+  };
+  const reads = [];
   const db = {
     collection: (id) => ref(id, true),
     runTransaction: async (fn) => {
       const writes = [];
       const result = await fn({
-        get: async (target) =>
-          target.query
+        get: async (target) => {
+          reads.push(target.path);
+          return target.query
             ? {
                 docs: [...rows.keys()]
                   .filter(
@@ -71,7 +77,8 @@ function harness() {
                   )
                   .map(snapshot),
               }
-            : snapshot(target.path),
+            : snapshot(target.path);
+        },
         set: (target, value) => writes.push([target.path, value]),
         delete: (target) => writes.push([target.path, undefined]),
         update: (target, value) =>
@@ -85,6 +92,7 @@ function harness() {
   };
   return {
     rows,
+    reads,
     execute: (uid, command) =>
       editSharedGroup({
         db,
@@ -110,6 +118,38 @@ const bill = {
   split: 'proportional',
   percentages: {},
 };
+
+test('proportional previews reuse finance records only at the current revision and recheck access', async () => {
+  const { rows, reads, execute } = harness();
+  const financePath = 'users/owner/finance';
+  const statePath = `${financePath}/state`;
+  const incomePath = `${financePath}/income:2026-11`;
+  const preview = (amount) =>
+    execute('member', {
+      action: 'preview',
+      changes: [{ kind: 'expenses', id: 'preview', value: { ...bill, amount } }],
+    });
+  const financeReads = () => reads.splice(0).filter((path) => path.startsWith(financePath));
+
+  assert.deepEqual(await preview(10000), { shares: { a: 2500, b: 7500 } });
+  assert.deepEqual(financeReads(), [financePath]);
+  assert.deepEqual(await preview(20000), { shares: { a: 5000, b: 15000 } });
+  assert.deepEqual(financeReads(), [statePath]);
+
+  rows.set(statePath, { ...rows.get(statePath), revision: 2 });
+  rows.set(incomePath, {
+    ...rows.get(incomePath),
+    revision: 2,
+    payload: JSON.stringify({ incomes: { a: 300000, b: 100000 } }),
+  });
+  assert.deepEqual(await preview(20000), { shares: { a: 15000, b: 5000 } });
+  assert.deepEqual(financeReads(), [statePath, financePath]);
+
+  rows.delete('groupMemberships/member_owner_home');
+  await assert.rejects(() => preview(20000), { status: 403 });
+  assert.deepEqual(financeReads(), []);
+});
+
 test('authorized benefit payments persist source and unchanged rateio atomically; outsiders and private credit edits remain forbidden', async () => {
   const { execute, read, rows } = harness();
   await assert.rejects(() =>
