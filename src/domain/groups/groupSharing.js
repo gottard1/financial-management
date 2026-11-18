@@ -197,7 +197,7 @@ export function projectSharedGroup(data, groupId) {
       })),
     settlements: (data.settlements || [])
       .filter((item) => item.scope === `group:${group.id}`)
-      .map(({ id, from, to, amount, date, referenceMonth, status }) => ({
+      .map(({ id, from, to, amount, date, referenceMonth, status, settlementRule }) => ({
         id,
         from,
         to,
@@ -205,6 +205,7 @@ export function projectSharedGroup(data, groupId) {
         date,
         referenceMonth,
         status,
+        ...(settlementRule ? { settlementRule } : {}),
       })),
   };
 }

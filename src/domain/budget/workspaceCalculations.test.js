@@ -154,17 +154,17 @@ test('individual overview includes its own costs plus its shares across all grou
     ],
   });
   const result = calculateWorkspace(model, '2026-10', 'person:' + p0, incomes);
-  assert.equal(result.total, 115000);
-  assert.equal(result.paid, 90000);
+  assert.equal(result.total, 105000);
+  assert.equal(result.paid, 80000);
   assert.equal(result.pending, 25000);
   assert.equal(result.expensePersonalTotal, 25000);
-  assert.equal(result.sharedShareTotal, 90000);
-  assert.deepEqual(result.shares, { [p0]: 115000 });
+  assert.equal(result.sharedShareTotal, 80000);
+  assert.deepEqual(result.shares, { [p0]: 105000 });
   assert.deepEqual(result.balances, {});
   assert.deepEqual(result.transfers, []);
   assert.equal(result.income, 300000);
-  assert.equal(result.available, 185000);
-  assert.deepEqual(result.categories, { Moradia: 115000 });
+  assert.equal(result.available, 195000);
+  assert.deepEqual(result.categories, { Moradia: 105000 });
   assert.deepEqual(result.paidBy, { [p0]: 0 });
 });
 
@@ -222,14 +222,14 @@ test('individual overview includes published guest shares once and applies VA/VR
     remoteGroups: [remote, remote, ownProjection],
     accountUid: 'me',
   });
-  assert.equal(result.total, 80001);
-  assert.equal(result.sharedShareTotal, 80001);
-  assert.equal(result.paid, 65000);
+  assert.equal(result.total, 70001);
+  assert.equal(result.sharedShareTotal, 70001);
+  assert.equal(result.paid, 55000);
   assert.equal(result.pending, 15001);
-  assert.equal(result.cashExpenses, 75001);
+  assert.equal(result.cashExpenses, 65001);
   assert.equal(result.benefitExpenses, 5000);
-  assert.equal(result.available, 224999);
-  assert.deepEqual(result.categories, { Moradia: 60000, Viagens: 15001, Alimentação: 5000 });
+  assert.equal(result.available, 234999);
+  assert.deepEqual(result.categories, { Moradia: 50000, Viagens: 15001, Alimentação: 5000 });
 });
 
 test('individual overview flags unavailable guest shares and excludes inactive memberships', () => {
@@ -238,13 +238,13 @@ test('individual overview flags unavailable guest shares and excludes inactive m
   const calculate = () =>
     calculateWorkspace(model, '2026-10', 'person:' + p0, incomes, { remoteGroups: [remote] });
   const partial = calculate();
-  assert.equal(partial.total, 60000);
+  assert.equal(partial.total, 50000);
   assert.equal(partial.sharedSharesIncomplete, true);
 
   remote.snapshot.activeMemberIds = [p1];
   remote.snapshot.expenses[0].shares = { [p1]: 95000, [p2]: 5000 };
   const inactive = calculate();
-  assert.equal(inactive.total, 60000);
+  assert.equal(inactive.total, 50000);
   assert.equal(inactive.sharedSharesIncomplete, false);
 });
 
@@ -265,10 +265,10 @@ test('group overview isolates its own expenses and incomes while retaining settl
   });
   const result = calculateWorkspace(model, '2026-10', 'group:group-a', incomes);
   assert.equal(result.total, 100000);
-  assert.deepEqual(result.shares, { [p0]: 60000, [p1]: 40000 });
+  assert.deepEqual(result.shares, { [p0]: 50000, [p1]: 50000 });
   assert.deepEqual(result.paidBy, { [p0]: 100000, [p1]: 0 });
-  assert.deepEqual(result.balances, { [p0]: 40000, [p1]: -40000 });
-  assert.deepEqual(result.transfers, [{ from: p1, to: p0, amount: 40000 }]);
+  assert.deepEqual(result.balances, { [p0]: 50000, [p1]: -50000 });
+  assert.deepEqual(result.transfers, [{ from: p1, to: p0, amount: 50000 }]);
   assert.equal(result.income, 500000);
 });
 
@@ -584,6 +584,7 @@ test('existing v3 and legacy records receive an empty settlements history withou
 
 test('group settlement totals isolate scope and competence, including payments made later', () => {
   const record = {
+    settlementRule: 'pairwise-v1',
     id: 'settlement1',
     scope: 'group:group-a',
     from: p1,
@@ -611,11 +612,11 @@ test('group settlement totals isolate scope and competence, including payments m
     incomes,
   );
   const stats = calculateWorkspace(model, '2026-10', 'group:group-a', incomes);
-  assert.deepEqual(stats.balances, { [p0]: 25000, [p1]: -25000 });
-  assert.deepEqual(stats.transfers, [{ from: p1, to: p0, amount: 25000 }]);
+  assert.deepEqual(stats.balances, { [p0]: 35000, [p1]: -35000 });
+  assert.deepEqual(stats.transfers, [{ from: p1, to: p0, amount: 35000 }]);
   for (const field of ['income', 'total', 'paid', 'pending', 'shares', 'paidBy', 'available'])
     assert.deepEqual(stats[field], baseline[field]);
-  assert.equal(calculateWorkspace(model, '2026-10', 'person:' + p1, incomes).available, 160000);
+  assert.equal(calculateWorkspace(model, '2026-10', 'person:' + p1, incomes).available, 150000);
 });
 
 test('migration validates confirmed and void settlement history without invalidating past overpayment', () => {

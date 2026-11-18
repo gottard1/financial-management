@@ -2,9 +2,12 @@ import { MoneyInput } from '../../components/ui/FormattedInput.jsx';
 import React, { useRef, useState } from 'react';
 import { money, parseMoney } from '../../domain/expenses/expenseCalculations.js';
 import { recordQuickSettlement } from '../../domain/settlements/quickSettlement.js';
+import { SettlementDetails, SettlementReviewNotice } from './SettlementDetails.jsx';
 
 export function QuickSettlements({
   transfers,
+  settlementPairs = [],
+  settlementIssues = [],
   nameOf,
   scope,
   month,
@@ -52,13 +55,14 @@ export function QuickSettlements({
   }
   return (
     <div className="quick-settlements">
+      <SettlementReviewNotice issues={settlementIssues} nameOf={nameOf} />
       {transfers.length > 0 && (
         <ul className="group-transfers">
           {transfers.map((transfer) => (
             <li key={`${transfer.from}:${transfer.to}`}>
               <div>
                 <strong>{nameOf(transfer.from)}</strong>
-                <span>repassa para {nameOf(transfer.to)}</span>
+                <span>devolve para {nameOf(transfer.to)}</span>
               </div>
               <strong className="amount">{money(transfer.amount)}</strong>
               {pendingReports.some(
@@ -76,7 +80,7 @@ export function QuickSettlements({
                     disabled={busy}
                     onClick={() => run(() => onReport(transfer))}
                   >
-                    {busy ? 'Salvando…' : 'Informar pagamento'}
+                    {busy ? 'Salvando…' : 'Devolver'}
                   </button>
                 )}
               {!readOnly &&
@@ -140,6 +144,7 @@ export function QuickSettlements({
                     )}
                   </div>
                 )}
+              <SettlementDetails transfer={transfer} pairs={settlementPairs} nameOf={nameOf} />
             </li>
           ))}
         </ul>

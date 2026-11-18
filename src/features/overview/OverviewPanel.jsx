@@ -63,14 +63,12 @@ export function OverviewPanel({
                 <li>
                   <span>
                     {ownBalance > 0
-                      ? 'Você tem a receber'
+                      ? 'Seu saldo líquido a receber'
                       : ownBalance < 0
-                        ? 'Você tem a repassar'
-                        : 'Seu acerto'}
+                        ? 'Seu saldo líquido a repassar'
+                        : 'Seu saldo líquido'}
                   </span>
-                  <strong>
-                    {ownBalance === 0 ? 'Em equilíbrio' : money(Math.abs(ownBalance))}
-                  </strong>
+                  <strong>{money(Math.abs(ownBalance))}</strong>
                 </li>
               </ul>
             </section>
@@ -134,11 +132,18 @@ export function OverviewPanel({
           <article className="panel overview-panel settlement">
             <header>
               <p className="eyebrow">ACERTO DO GRUPO</p>
-              <h2>{transfers.length ? 'Como equilibrar as contas' : 'Tudo em equilíbrio'}</h2>
+              <h2>
+                {stats.settlementIssues?.length
+                  ? 'Acerto aguardando revisão'
+                  : transfers.length
+                    ? 'Como equilibrar as contas'
+                    : 'Tudo em equilíbrio'}
+              </h2>
             </header>
             <p className="settlement-description">
-              Sugestões calculadas sobre contas pagas, descontando os repasses já confirmados.
-              Despesas pendentes ficam fora do acerto.
+              Cada repasse compensa somente as dívidas entre as duas pessoas, sobre contas pagas,
+              descontando os repasses já confirmados na dupla. Despesas pendentes ficam fora do
+              acerto.
             </p>
             {!readOnly && !receiverId && (
               <p className="notice">
@@ -148,6 +153,8 @@ export function OverviewPanel({
             )}
             <QuickSettlements
               key={scope + '|' + month}
+              settlementPairs={stats.settlementPairs}
+              settlementIssues={stats.settlementIssues}
               {...{
                 transfers,
                 nameOf,
@@ -236,13 +243,19 @@ export function OverviewPanel({
                         <dd>{money(stats.paidBy?.[person.id] || 0)}</dd>
                       </div>
                       <div>
-                        <dt>{balance > 0 ? 'A receber' : balance < 0 ? 'A repassar' : 'Acerto'}</dt>
+                        <dt>
+                          {balance > 0
+                            ? 'Saldo líquido a receber'
+                            : balance < 0
+                              ? 'Saldo líquido a repassar'
+                              : 'Saldo líquido'}
+                        </dt>
                         <dd
                           className={
                             balance > 0 ? 'metric-positive' : balance < 0 ? 'metric-negative' : ''
                           }
                         >
-                          {balance === 0 ? 'Em equilíbrio' : money(Math.abs(balance))}
+                          {money(Math.abs(balance))}
                         </dd>
                       </div>
                     </dl>

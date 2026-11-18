@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPaymentReport, resolvePaymentReport } from './paymentReports.js';
+import { summarize } from '../expenses/expenseCalculations.js';
 
-const stats = { balances: { joao: -1200, maria: 1200, lucas: 0 } };
 const members = ['joao', 'maria', 'lucas'];
+const stats = summarize(
+  [{ amount: 1200, participants: ['joao'], payer: 'maria', split: 'equal', status: 'paid' }],
+  {},
+  members,
+);
 const input = {
   id: 'report-1',
   scope: 'group:plans',

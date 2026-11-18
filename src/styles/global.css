@@ -2910,6 +2910,24 @@ dialog {
   flex-wrap: wrap;
 }
 
+.settlement-details {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: 0.85rem;
+}
+.settlement-details summary {
+  cursor: pointer;
+}
+.settlement-details .settlement-expenses {
+  padding-left: 1.5rem;
+  margin-top: 1rem;
+}
+.group-transfers .settlement-expenses li {
+  display: block;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem;
+}
+
 .quick-receipt-actions {
   display: flex;
   flex-wrap: wrap;

@@ -2,25 +2,14 @@ import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { nextSettlementLedger } from '../../domain/settlements/sharedSettlements.js';
 
 export async function writeSharedSettlement(db, uid, groupId, options) {
+  if (!options.voidId) throw new Error('Confirme o recebimento pela API autenticada de repasses.');
   await runTransaction(db, async (transaction) => {
     const groupRef = doc(db, 'sharedGroups', groupId);
     const ref = doc(groupRef, 'settlementMonths', options.month);
     const groupDoc = await transaction.get(groupRef);
     const ledgerDoc = await transaction.get(ref);
-    let reportRef, reportDoc;
-    if (options.voidId) {
-      reportRef = doc(groupRef, 'paymentReports', options.voidId);
-      reportDoc = await transaction.get(reportRef);
-    } else if (options.transfer) {
-      const key = encodeURIComponent(
-        `${options.month}|${options.transfer.from}|${options.transfer.to}`,
-      );
-      const pending = await transaction.get(doc(groupRef, 'paymentReportLocks', key));
-      if (pending.exists())
-        throw new Error(
-          'Este acerto já aguarda confirmação. Responda à solicitação de recebimento.',
-        );
-    }
+    const reportRef = doc(groupRef, 'paymentReports', options.voidId);
+    const reportDoc = await transaction.get(reportRef);
     if (!groupDoc.exists() || groupDoc.data().deleted)
       throw new Error('Este grupo não está disponível.');
     const group = groupDoc.data();

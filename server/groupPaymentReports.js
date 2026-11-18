@@ -23,7 +23,13 @@ export async function editGroupPayment({
 }) {
   const reports = ref.collection('paymentReports');
   let report, reportRef;
-  if (command.action === 'report-payment') {
+  const direct = command.action === 'receive-payment';
+  if (direct) {
+    if (!command.transfer || command.transfer.to !== actorId)
+      throw fail(403, 'Você só pode confirmar o dinheiro que recebeu.');
+    if (typeof command.id !== 'string' || !command.id || command.id.length > 150)
+      throw fail(400, 'Identificador de recebimento inválido.');
+  } else if (command.action === 'report-payment') {
     if (!command.transfer || command.transfer.from !== actorId)
       throw fail(403, 'Somente quem paga pode informar o pagamento.');
     reportRef = reports.doc(randomUUID());
@@ -58,7 +64,21 @@ export async function editGroupPayment({
     .doc(encodeURIComponent(`${month}|${transfer.from}|${transfer.to}`));
   const lock = (await transaction.get(lockRef)).data();
   try {
-    if (!report) {
+    if (direct) {
+      if (lock?.reportId)
+        throw fail(
+          409,
+          'Este acerto já aguarda confirmação. Responda à solicitação de recebimento.',
+        );
+      const next = nextSettlementLedger(group.snapshot, ledger, {
+        month,
+        transfer: { from: transfer.from, to: transfer.to, amount: transfer.amount },
+        uid,
+        id: command.id,
+        date: command.date,
+      });
+      transaction.set(ledgerRef, { ...next, baseRevision: group.revision, updatedAt: timestamp() });
+    } else if (!report) {
       if (lock?.reportId) throw fail(409, 'Este acerto já aguarda confirmação.');
       let toUid;
       if (transfer.to === group.snapshot.adminPersonId) toUid = group.adminUid;

@@ -78,7 +78,7 @@ test('uses invoice competence for cards and due month for old records with exact
   d.expenses[1].date = '2026-12-06';
   const november = consolidatedExpenses(d, 'person-0', '2026-11');
   assert.equal(november.length, 2);
-  assert.equal(november.find((r) => r.kind === 'group').ownAmount, 3334);
+  assert.equal(november.find((r) => r.kind === 'group').ownAmount, 5001);
   assert.equal(consolidatedExpenses(d, 'person-0', '2026-12').length, 0);
 });
 function remoteGroup() {
@@ -137,6 +137,8 @@ test('unavailable proportional or remote shares mark totals incomplete instead o
   const d = fixture();
   d.expenses[1].split = 'proportional';
   d.months = {};
+  d.people.push({ id: 'c', name: 'Cris' });
+  d.groups[0].memberIds.push('c');
   const remote = remoteGroup();
   delete remote.snapshot.expenses[0].shares;
   const rows = consolidatedExpenses(d, 'person-0', '2026-11', [remote]);

@@ -110,6 +110,7 @@ export function SettlementsPanel({
       amount: amountText(transfer.amount),
     }));
     setError('');
+    if (formRef.current) formRef.current.open = true;
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     formRef.current
       ?.querySelector('input[name="settlementAmount"]')
@@ -136,6 +137,7 @@ export function SettlementsPanel({
         referenceMonth: month,
         note: form.note.trim(),
         status: 'confirmed',
+        settlementRule: 'pairwise-v1',
       };
       validateNewSettlement(record, stats, memberIds);
       if (receiverId && record.to !== receiverId)
@@ -262,6 +264,8 @@ export function SettlementsPanel({
         </div>
         <QuickSettlements
           transfers={suggestions}
+          settlementPairs={stats.settlementPairs}
+          settlementIssues={stats.settlementIssues}
           nameOf={(id) => names[id] || 'Participante'}
           {...{ scope, month, receiverId, onSharedReceive, onSharedUndo, onReport, pendingReports }}
           commitData={async (update) => setData(update)}

@@ -1,4 +1,4 @@
-import { buildTransfers } from '../expenses/expenseCalculations.js';
+import { calculatePairs } from './pairwiseSettlements.js';
 
 export const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
 export const RECEIPT_TYPES = Object.freeze([
@@ -75,6 +75,8 @@ export function validateSettlementRecord(record, memberIds) {
   if (typeof record.note !== 'string') throw new Error('Observação do repasse inválida.');
   if (!['confirmed', 'void'].includes(record.status))
     throw new Error('Situação do repasse inválida.');
+  if (record.settlementRule !== undefined && record.settlementRule !== 'pairwise-v1')
+    throw new Error('Regra do repasse inválida.');
   if (record.receipt !== undefined) {
     object(record.receipt, 'Comprovante');
     text(record.receipt.id, 'Identificador do comprovante');
@@ -91,24 +93,22 @@ export function validateSettlementRecord(record, memberIds) {
   return record;
 }
 
-/** Validate against the CURRENT adjusted balances, only when recording a new transfer. */
+/** Revalidate the CURRENT debt of this pair, including confirmed partial payments. */
 export function validateNewSettlement(record, stats, memberIds) {
   validateSettlementRecord(record, memberIds);
   if (record.status !== 'confirmed') throw new Error('Um novo repasse precisa estar confirmado.');
-  const balances = balancesOf(stats, memberIds);
-  const debt = -balances.get(record.from);
-  const credit = balances.get(record.to);
-  if (debt <= 0n) throw new Error('A pessoa que paga não tem dívida pendente nesta competência.');
-  if (credit <= 0n)
-    throw new Error('A pessoa que recebe não tem crédito pendente nesta competência.');
-  if (BigInt(record.amount) > debt || BigInt(record.amount) > credit)
+  if (!Array.isArray(stats.settlementPairs) || stats.settlementIssues?.length)
     throw new Error(
-      'O repasse não pode exceder a dívida de quem paga nem o crédito de quem recebe.',
+      'Revise os repasses anteriores ou atualize os dados compartilhados antes de registrar um novo acerto.',
     );
+  const debt =
+    stats.transfers.find((item) => item.from === record.from && item.to === record.to)?.amount ?? 0;
+  if (record.amount > debt)
+    throw new Error('O repasse não pode exceder o saldo em aberto entre estas duas pessoas.');
   return record;
 }
 
-/** Historical transfers adjust balances, never expenses or income. Recalculation may reverse a balance. */
+/** Preserve historical records. Ambiguous old payments require review, never automatic reassignment. */
 export function applySettlements(baseStats, records, memberIds) {
   members(memberIds);
   if (!Array.isArray(records)) throw new Error('Informe uma lista de repasses.');
@@ -123,5 +123,16 @@ export function applySettlements(baseStats, records, memberIds) {
     balances.set(record.to, balances.get(record.to) - BigInt(record.amount));
   }
   const adjusted = Object.fromEntries(memberIds.map((id) => [id, safe(balances.get(id))]));
-  return { ...baseStats, balances: adjusted, transfers: buildTransfers(adjusted, memberIds) };
+  const result = calculatePairs(baseStats.settlementPairs ?? [], records, memberIds);
+  if (!Array.isArray(baseStats.settlementPairs))
+    result.settlementIssues.push({ reason: 'snapshot-outdated' });
+  if (
+    baseStats.settlementSplitChanged &&
+    result.settlementPairs.some((pair) =>
+      pair.payments.some((payment) => payment.settlementRule !== 'pairwise-v1'),
+    )
+  )
+    result.settlementIssues.push({ reason: 'split-changed' });
+  if (result.settlementIssues.length) result.transfers = [];
+  return { ...baseStats, balances: adjusted, ...result };
 }

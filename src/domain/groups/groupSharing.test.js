@@ -73,13 +73,13 @@ test('shares only group history with exact existing participant IDs and calculat
     { id: 'b', name: 'Bia' },
   ]);
   assert.equal(result.expenses.length, 1);
-  assert.deepEqual(result.expenses[0].shares, { a: 2500, b: 7501 });
+  assert.deepEqual(result.expenses[0].shares, { a: 5001, b: 5000 });
   assert.equal(result.settlements.length, 1);
   assert.equal(result.settlements[0].id, 's');
   assert.equal(result.overview['2026-10'].stats.income, undefined);
   assert.equal(result.overview['2026-10'].stats.available, undefined);
   assert.equal(result.overview['2026-10'].stats.total, 10001);
-  assert.deepEqual(result.overview['2026-10'].stats.shares, { a: 2500, b: 7501 });
+  assert.deepEqual(result.overview['2026-10'].stats.shares, { a: 5001, b: 5000 });
   const json = JSON.stringify(result);
   for (const secret of [
     'secret',

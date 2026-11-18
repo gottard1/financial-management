@@ -192,7 +192,7 @@ test('removes from active membership without deleting the person, expenses, inco
   const projection = projectSharedGroup(next, 'home');
   assert.deepEqual(projection.activeMemberIds, ['a']);
   assert.equal(projection.people.length, 2);
-  assert.deepEqual(projection.expenses[0].shares, { a: 10000, b: 20000 });
+  assert.deepEqual(projection.expenses[0].shares, { a: 15000, b: 15000 });
   assert.deepEqual(migrateData(next).groups, next.groups);
 });
 test('prevents removal of the last participant, duplicates and invalid archived references', () => {

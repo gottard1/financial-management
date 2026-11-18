@@ -29,6 +29,7 @@ export function recordQuickSettlement(data, { scope, month, transfer, id, date }
     referenceMonth: month,
     note: '',
     status: 'confirmed',
+    settlementRule: 'pairwise-v1',
   };
   validateNewSettlement(record, stats, group.memberIds);
   return { ...data, settlements: [...(data.settlements || []), record] };

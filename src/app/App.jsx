@@ -503,6 +503,7 @@ function FinanceApp({ storageNamespace }) {
                     referenceMonth: report.month,
                     note: '',
                     status: 'confirmed',
+                    settlementRule: 'pairwise-v1',
                   },
                 ]
               : current.settlements,

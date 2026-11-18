@@ -156,7 +156,11 @@ test('custom percentages sum to exactly 100 in basis points, including zero and 
 
 test('pending bills affect shares but never balances, paid totals or transfers', () => {
   const result = summarize([bill(), bill({ status: 'pending', payer: 'bia' })], incomes, ids);
-  assert.deepEqual(result, {
+  const { settlementPairs, settlementIssues, settlementSplitChanged, ...totals } = result;
+  assert.equal(settlementPairs.length, 2);
+  assert.deepEqual(settlementIssues, []);
+  assert.equal(settlementSplitChanged, false);
+  assert.deepEqual(totals, {
     total: 120000,
     paid: 60000,
     pending: 60000,
@@ -196,9 +200,13 @@ test('five-person multiple creditors and debtors settle deterministically and re
   );
   assert.deepEqual(result.balances, { a: 360, b: 60, c: -140, d: -240, e: -40 });
   assert.deepEqual(result.transfers, [
-    { from: 'c', to: 'a', amount: 140 },
-    { from: 'd', to: 'a', amount: 220 },
-    { from: 'd', to: 'b', amount: 20 },
+    { from: 'b', to: 'a', amount: 60 },
+    { from: 'c', to: 'a', amount: 100 },
+    { from: 'c', to: 'b', amount: 40 },
+    { from: 'd', to: 'a', amount: 100 },
+    { from: 'd', to: 'b', amount: 40 },
+    { from: 'd', to: 'e', amount: 100 },
+    { from: 'e', to: 'a', amount: 100 },
     { from: 'e', to: 'b', amount: 40 },
   ]);
   const reconciled = { ...result.balances };
@@ -248,6 +256,9 @@ test('empty summaries and prototype-shaped IDs return valid own-property records
     paidBy: { ana: 0, bia: 0, caio: 0 },
     balances: { ana: 0, bia: 0, caio: 0 },
     transfers: [],
+    settlementPairs: [],
+    settlementIssues: [],
+    settlementSplitChanged: false,
   });
   const members = ['__proto__', 'constructor'];
   const result = summarize(

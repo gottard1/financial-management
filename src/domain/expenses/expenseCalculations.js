@@ -1,4 +1,5 @@
 import { validatePaymentSource } from '../benefits/benefitPayments.js';
+import { calculatePairs } from '../settlements/pairwiseSettlements.js';
 const formatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function cents(value, label = 'Valor') {
@@ -89,7 +90,7 @@ function allocate(amount, participants, weights, memberIds) {
   return Object.fromEntries(memberIds.map((id) => [id, values.get(id) ?? 0]));
 }
 
-export function splitExpense(expense, incomes, memberIds) {
+export function splitExpense(expense, incomes, memberIds, { legacy = false } = {}) {
   const members = validateContext(incomes, memberIds);
   record(expense, 'Despesa');
   validatePaymentSource(expense);
@@ -101,7 +102,13 @@ export function splitExpense(expense, incomes, memberIds) {
     throw new Error('Selecione quem pagou ou pagará entre os membros do espaço financeiro.');
   if (!['paid', 'pending'].includes(expense.status)) throw new Error('Situação da conta inválida.');
   let weights;
-  if (expense.split === 'equal') weights = expense.participants.map(() => 1n);
+  if (!['equal', 'proportional', 'custom'].includes(expense.split))
+    throw new Error('Selecione uma forma de divisão válida.');
+  if (
+    expense.split === 'equal' ||
+    (!legacy && memberIds.length === 2 && expense.participants.length === 2)
+  )
+    weights = expense.participants.map(() => 1n);
   else if (expense.split === 'proportional') {
     weights = expense.participants.map((id) =>
       BigInt(Object.hasOwn(incomes, id) ? incomes[id] : 0),
@@ -123,29 +130,6 @@ export function splitExpense(expense, incomes, memberIds) {
   return allocate(amount, expense.participants, weights, memberIds);
 }
 
-export function buildTransfers(balances, memberIds) {
-  const debtors = memberIds
-    .filter((id) => balances[id] < 0)
-    .map((id) => ({ id, amount: -balances[id] }));
-  const creditors = memberIds
-    .filter((id) => balances[id] > 0)
-    .map((id) => ({ id, amount: balances[id] }));
-  const transfers = [];
-  let debtorIndex = 0;
-  let creditorIndex = 0;
-  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
-    const debtor = debtors[debtorIndex];
-    const creditor = creditors[creditorIndex];
-    const amount = Math.min(debtor.amount, creditor.amount);
-    transfers.push({ from: debtor.id, to: creditor.id, amount });
-    debtor.amount -= amount;
-    creditor.amount -= amount;
-    if (debtor.amount === 0) debtorIndex += 1;
-    if (creditor.amount === 0) creditorIndex += 1;
-  }
-  return transfers;
-}
-
 export function summarize(expenses, incomes, memberIds) {
   validateContext(incomes, memberIds);
   if (!Array.isArray(expenses)) throw new Error('Informe uma lista de despesas.');
@@ -154,11 +138,43 @@ export function summarize(expenses, incomes, memberIds) {
   const shares = new Map(memberIds.map((id) => [id, 0n]));
   const paidShares = new Map(shares);
   const paidBy = new Map(shares);
+  const pairs = [];
+  let settlementSplitChanged = false;
   for (const expense of expenses) {
     const division = splitExpense(expense, incomes, memberIds);
     total += BigInt(expense.amount);
     for (const id of memberIds) shares.set(id, shares.get(id) + BigInt(division[id]));
     if (expense.status === 'paid') {
+      if (
+        memberIds.length === 2 &&
+        expense.participants.length === 2 &&
+        expense.split !== 'equal'
+      ) {
+        try {
+          const original = splitExpense(expense, incomes, memberIds, { legacy: true });
+          settlementSplitChanged ||= memberIds.some((id) => original[id] !== division[id]);
+        } catch {
+          settlementSplitChanged = true;
+        }
+      }
+      for (const id of expense.participants) {
+        if (id === expense.payer || division[id] === 0) continue;
+        const [first, second] = [id, expense.payer].sort();
+        pairs.push({
+          first,
+          second,
+          payments: [],
+          expenses: [
+            {
+              expenseId: expense.id ?? '',
+              description: expense.description || 'Despesa',
+              from: id,
+              to: expense.payer,
+              amount: division[id],
+            },
+          ],
+        });
+      }
       paid += BigInt(expense.amount);
       paidBy.set(expense.payer, paidBy.get(expense.payer) + BigInt(expense.amount));
       for (const id of memberIds) paidShares.set(id, paidShares.get(id) + BigInt(division[id]));
@@ -175,6 +191,7 @@ export function summarize(expenses, incomes, memberIds) {
     shares: Object.fromEntries(memberIds.map((id) => [id, safeNumber(shares.get(id))])),
     paidBy: Object.fromEntries(memberIds.map((id) => [id, safeNumber(paidBy.get(id))])),
     balances,
-    transfers: buildTransfers(balances, memberIds),
+    settlementSplitChanged,
+    ...calculatePairs(pairs, [], memberIds),
   };
 }

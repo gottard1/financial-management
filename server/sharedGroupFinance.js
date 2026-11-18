@@ -88,7 +88,11 @@ export async function editSharedGroup({ db, timestamp, uid, command }) {
         409,
         'O grupo mudou em outra sessão. Confira os dados atualizados e tente novamente.',
       );
-    if (['report-payment', 'confirm-payment', 'reject-payment'].includes(command.action))
+    if (
+      ['report-payment', 'confirm-payment', 'reject-payment', 'receive-payment'].includes(
+        command.action,
+      )
+    )
       return editGroupPayment({ db, transaction, ref, group, actorId, uid, command, timestamp });
     const financeRef = db.collection('users').doc(group.adminUid).collection('finance');
     const { records, finance } = await readFinance(

@@ -78,16 +78,15 @@ test('new transfer validation uses already adjusted balances and rejects overpay
   );
 });
 
-test('historical overpayment after expense edits remains valid and reverses the obligation', () => {
+test('historical overpayment after expense edits is preserved and requests reconciliation', () => {
   const historical = transfer({ amount: 40000 });
   assert.doesNotThrow(() => validateSettlementRecord(historical, members));
   assert.throws(() => validateNewSettlement(historical, base(), members));
   const result = applySettlements(base(), [historical], members);
   assert.deepEqual(result.balances, { ana: 20000, bia: 10000, cris: -30000 });
-  assert.deepEqual(result.transfers, [
-    { from: 'cris', to: 'ana', amount: 20000 },
-    { from: 'cris', to: 'bia', amount: 10000 },
-  ]);
+  assert.deepEqual(result.transfers, []);
+  assert.equal(result.settlementIssues[0].reason, 'payment-mismatch');
+  assert.throws(() => validateNewSettlement(transfer({ id: 'new' }), result, members), /Revise/);
 });
 
 test('validates transfer identity, group scope, members, positive cents, dates and note', () => {

@@ -4,6 +4,7 @@ import { createSharedGroupFinanceHandler, editSharedGroup } from './sharedGroupF
 import { migrateData } from '../src/domain/budget/workspaceCalculations.js';
 import { encodeFinance, decodeFinance } from '../src/domain/budget/financeCloudCodec.js';
 import { projectSharedGroup } from '../src/domain/groups/groupSharing.js';
+import { sharedMonthOverview } from '../src/domain/settlements/sharedSettlements.js';
 
 function harness() {
   const data = migrateData({
@@ -119,7 +120,55 @@ const bill = {
   percentages: {},
 };
 
-test('proportional previews reuse finance records only at the current revision and recheck access', async () => {
+test('direct receipts validate the pair atomically, even when the receiver has a global debt', async () => {
+  const h = harness();
+  const data = h.read().data;
+  data.people.push({ id: 'c', name: 'Cris' });
+  data.groups[0].memberIds.push('c');
+  data.expenses = [
+    { ...bill, id: 'ab', workspace: 'group:home', amount: 500, payer: 'b', participants: ['a'] },
+    { ...bill, id: 'bc', workspace: 'group:home', amount: 1000, payer: 'c', participants: ['b'] },
+  ];
+  const snapshot = projectSharedGroup(data, 'home');
+  const groupPath = 'sharedGroups/owner_home';
+  h.rows.set(groupPath, { ...h.rows.get(groupPath), snapshot });
+  const command = {
+    action: 'receive-payment',
+    month: '2026-11',
+    date: '2026-11-02',
+    id: 'direct',
+    transfer: { from: 'a', to: 'b', amount: 200 },
+  };
+  await assert.rejects(() => h.execute('owner', command), { status: 403 });
+  await assert.rejects(() => h.execute('stranger', command), { status: 403 });
+  await assert.rejects(() =>
+    h.execute('member', { ...command, transfer: { from: 'c', to: 'b', amount: 200 } }),
+  );
+  await assert.rejects(() =>
+    h.execute('member', { ...command, transfer: { ...command.transfer, amount: 501 } }),
+  );
+  await h.execute('member', command);
+  const ledgerPath = groupPath + '/settlementMonths/2026-11';
+  const ledger = h.rows.get(ledgerPath);
+  assert.equal(ledger.records[0].receiverUid, 'member');
+  assert.equal(ledger.records[0].settlementRule, 'pairwise-v1');
+  assert.deepEqual(sharedMonthOverview(snapshot, '2026-11', ledger).stats.transfers, [
+    { from: 'a', to: 'b', amount: 300 },
+    { from: 'b', to: 'c', amount: 1000 },
+  ]);
+  await assert.rejects(() => h.execute('member', command));
+  await h.execute('member', {
+    ...command,
+    id: 'rest',
+    transfer: { ...command.transfer, amount: 300 },
+  });
+  await assert.rejects(() => h.execute('member', { ...command, id: 'overpaid' }));
+  assert.equal(h.rows.get(ledgerPath).records.length, 2);
+  h.rows.get('groupInvites/owner_home_b').status = 'revoked';
+  await assert.rejects(() => h.execute('member', { ...command, id: 'revoked' }), { status: 403 });
+});
+
+test('two-person previews enforce 50/50 and reuse finance records only at the current revision, rechecking access', async () => {
   const { rows, reads, execute } = harness();
   const financePath = 'users/owner/finance';
   const statePath = `${financePath}/state`;
@@ -131,9 +180,9 @@ test('proportional previews reuse finance records only at the current revision a
     });
   const financeReads = () => reads.splice(0).filter((path) => path.startsWith(financePath));
 
-  assert.deepEqual(await preview(10000), { shares: { a: 2500, b: 7500 } });
+  assert.deepEqual(await preview(10000), { shares: { a: 5000, b: 5000 } });
   assert.deepEqual(financeReads(), [financePath]);
-  assert.deepEqual(await preview(20000), { shares: { a: 5000, b: 15000 } });
+  assert.deepEqual(await preview(20000), { shares: { a: 10000, b: 10000 } });
   assert.deepEqual(financeReads(), [statePath]);
 
   rows.set(statePath, { ...rows.get(statePath), revision: 2 });
@@ -142,7 +191,7 @@ test('proportional previews reuse finance records only at the current revision a
     revision: 2,
     payload: JSON.stringify({ incomes: { a: 300000, b: 100000 } }),
   });
-  assert.deepEqual(await preview(20000), { shares: { a: 15000, b: 5000 } });
+  assert.deepEqual(await preview(20000), { shares: { a: 10000, b: 10000 } });
   assert.deepEqual(financeReads(), [statePath, financePath]);
 
   rows.delete('groupMemberships/member_owner_home');
@@ -183,7 +232,7 @@ test('authorized benefit payments persist source and unchanged rateio atomically
   });
   assert.equal(read().data.expenses[0].paymentSource, 'foodAllowance');
   assert.deepEqual(read().data.months, { '2026-11': { a: 100000, b: 300000 } });
-  assert.deepEqual(result.snapshot.expenses[0].shares, { a: 2500, b: 7501 });
+  assert.deepEqual(result.snapshot.expenses[0].shares, { a: 5001, b: 5000 });
   assert.equal(result.snapshot.overview['2026-11'].stats.cashExpenses, 0);
   assert.equal(result.snapshot.incomeConfigs, undefined);
   assert.equal(rows.get('sharedGroups/owner_home').financeRevision, 2);
@@ -332,7 +381,7 @@ test('member edits persist in owner finance and public group atomically without 
   assert.equal(read().data.expenses[0].amount, 10001);
   assert.equal(read().data.months['2026-11'].a, 100000);
   assert.equal(rows.get('sharedGroups/owner_home').financeRevision, 2);
-  assert.deepEqual(result.snapshot.expenses[0].shares, { a: 2500, b: 7501 });
+  assert.deepEqual(result.snapshot.expenses[0].shares, { a: 5001, b: 5000 });
   assert.ok(!JSON.stringify(result).includes('private'));
   assert.ok(!JSON.stringify(result).includes('100000'));
   await assert.rejects(() => execute('member', { action: 'rename', name: 'Antigo' }), {
@@ -376,7 +425,7 @@ test('preview never writes, only administrators rename, and members can invite n
         changes: [{ kind: 'expenses', id: 'preview', value: bill }],
       })
     ).shares,
-    { a: 2500, b: 7501 },
+    { a: 5001, b: 5000 },
   );
   assert.equal(JSON.stringify([...rows]), before);
   await assert.rejects(() => execute('member', { action: 'rename', name: 'Novo nome' }), {
@@ -482,7 +531,7 @@ test('payer reports do not settle debt; only the receiver resolves the request, 
     transfer: {
       from: 'b',
       to: 'a',
-      amount: 7501,
+      amount: 5000,
       scope: 'group:forged',
       id: 'forged',
       toUid: 'forged',
@@ -507,7 +556,7 @@ test('payer reports do not settle debt; only the receiver resolves the request, 
   assert.equal(h.rows.get(path).status, 'confirmed');
   const ledger = h.rows.get('sharedGroups/owner_home/settlementMonths/2026-11');
   assert.equal(ledger.records.length, 1);
-  assert.equal(ledger.records[0].amount, 7501);
+  assert.equal(ledger.records[0].amount, 5000);
   assert.equal(ledger.records[0].receiverUid, 'owner');
   assert.equal(
     [...h.rows.keys()].some((path) => path.includes('/paymentReportLocks/')),

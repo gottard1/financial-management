@@ -37,6 +37,7 @@ export function nextSettlementLedger(snapshot, ledger, { month, transfer, uid, i
       status: 'confirmed',
       receiverUid: uid,
       targetIndex: -1,
+      settlementRule: 'pairwise-v1',
     };
     if (previous.ids[id]) throw new Error('Este recebimento já foi registrado.');
     const overview = sharedMonthOverview(snapshot, month, previous);

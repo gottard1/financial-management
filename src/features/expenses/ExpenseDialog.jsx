@@ -437,49 +437,64 @@ export function ExpenseDialog({
             <div className="form-grid">
               <label className="field">
                 Forma de divisão
-                <select value={draft.split} onChange={(e) => changeSplit(e.target.value)}>
+                <select
+                  value={
+                    memberIds.length === 2 && draft.participants.length === 2
+                      ? 'equal'
+                      : draft.split
+                  }
+                  disabled={memberIds.length === 2 && draft.participants.length === 2}
+                  onChange={(e) => changeSplit(e.target.value)}
+                >
                   <option value="equal">Partes iguais</option>
                   <option value="proportional">Proporcional à renda líquida</option>
                   <option value="custom">Percentuais personalizados</option>
                 </select>
               </label>
             </div>
-            {draft.split === 'custom' && (
-              <>
-                <p className="muted">
-                  Os percentuais devem somar 100%. Alterar os participantes redistribui os
-                  percentuais igualmente.
-                </p>
-                <div className="form-grid">
-                  {draft.participants.map((id) => (
-                    <label className="field" key={id}>
-                      Parte de {nameOf(id)} (%)
-                      <PercentInput
-                        required
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={draft.percentages?.[id] ?? ''}
-                        onChange={(e) =>
-                          setDraft((current) => ({
-                            ...current,
-                            percentages: { ...current.percentages, [id]: e.target.value },
-                          }))
-                        }
-                      />
-                    </label>
-                  ))}
-                </div>
-                <p
-                  className={percentTotal === 100 ? 'metric-positive' : 'metric-negative'}
-                  aria-live="polite"
-                >
-                  Total: {percentTotal.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% de
-                  100%
-                </p>
-              </>
+            {memberIds.length === 2 && draft.participants.length === 2 && (
+              <p className="hint">
+                As despesas compartilhadas pelas duas pessoas são divididas em 50/50. Um centavo
+                indivisível segue a ordem dos participantes.
+              </p>
             )}
+            {draft.split === 'custom' &&
+              !(memberIds.length === 2 && draft.participants.length === 2) && (
+                <>
+                  <p className="muted">
+                    Os percentuais devem somar 100%. Alterar os participantes redistribui os
+                    percentuais igualmente.
+                  </p>
+                  <div className="form-grid">
+                    {draft.participants.map((id) => (
+                      <label className="field" key={id}>
+                        Parte de {nameOf(id)} (%)
+                        <PercentInput
+                          required
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={draft.percentages?.[id] ?? ''}
+                          onChange={(e) =>
+                            setDraft((current) => ({
+                              ...current,
+                              percentages: { ...current.percentages, [id]: e.target.value },
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p
+                    className={percentTotal === 100 ? 'metric-positive' : 'metric-negative'}
+                    aria-live="polite"
+                  >
+                    Total: {percentTotal.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% de
+                    100%
+                  </p>
+                </>
+              )}
           </fieldset>
         )}
         <fieldset className="form-section expense-form-section">

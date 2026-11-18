@@ -577,6 +577,8 @@ test('personal future commitments include shared portions exactly once and flag 
     25000,
   );
   d.expenses[1].split = 'proportional';
+  d.people.push({ id: 'c', name: 'Cris' });
+  d.groups[0].memberIds.push('c');
   assert.ok(installmentCommitments(d, scope, '2026-11').some((e) => e.projectionError));
 });
 test('optional collections migrate old v3, retain backups and cloud order, and reject malformed new data without touching originals', () => {

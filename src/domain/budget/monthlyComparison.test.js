@@ -59,15 +59,15 @@ test('compares personal costs plus exact monthly shared portions without leaking
   const result = compareMonths(fixture(), 'person:a', '2026-09', '2026-10');
   assert.deepEqual(
     result.rows.map((row) => row.total),
-    [6000, 7500],
+    [6000, 5000],
   );
-  assert.equal(result.total, 13500);
+  assert.equal(result.total, 11000);
   assert.equal(result.paid, 6000);
-  assert.equal(result.pending, 7500);
-  assert.equal(result.delta, 1500);
-  assert.equal(result.deltaPercent, 25);
-  assert.equal(result.average, 6750);
-  assert.deepEqual(result.categories.find((item) => item.name === 'Moradia').values, [5000, 7500]);
+  assert.equal(result.pending, 5000);
+  assert.equal(result.delta, -1000);
+  assert.equal(result.deltaPercent, (-1000 / 6000) * 100);
+  assert.equal(result.average, 5500);
+  assert.deepEqual(result.categories.find((item) => item.name === 'Moradia').values, [5000, 5000]);
 });
 test('group comparisons isolate their expenses and include months without records as zero', () => {
   const result = compareMonths(fixture(), 'group:home', '2026-08', '2026-10');
@@ -80,6 +80,8 @@ test('group comparisons isolate their expenses and include months without record
 });
 test('missing proportional income is reported, never counted as a fabricated zero', () => {
   const data = fixture();
+  data.people.push({ id: 'c', name: 'Cris' });
+  data.groups[0].memberIds.push('c');
   delete data.months['2026-10'];
   const result = compareMonths(data, 'person:a', '2026-09', '2026-10');
   assert.ok(result.rows[1].error);

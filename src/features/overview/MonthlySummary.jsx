@@ -8,10 +8,10 @@ export function MonthlySummary({ stats, mode, benefits, receiverId, go }) {
   const label = group
     ? receiverId
       ? balance > 0
-        ? 'Você tem a receber no grupo'
+        ? 'Seu saldo líquido a receber no grupo'
         : balance < 0
-          ? 'Você tem a repassar no grupo'
-          : 'Seus acertos estão em equilíbrio'
+          ? 'Seu saldo líquido a repassar no grupo'
+          : 'Seu saldo líquido no grupo'
       : 'Despesas do grupo no mês'
     : 'Disponível previsto';
   const amount = group ? (receiverId ? Math.abs(balance) : stats.total) : stats.available;
