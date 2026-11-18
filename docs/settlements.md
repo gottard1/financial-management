@@ -5,7 +5,7 @@
 1. Selecione o espaço **Grupo** e o grupo desejado.
 2. Escolha o mês de referência da dívida.
 3. Abra **Repasses e comprovantes** ou use o botão na visão geral do grupo.
-4. Abra **Ver detalhamento** para conferir as despesas, quem pagou, a parte devida em cada sentido, o valor compensado e os repasses confirmados da dupla. Quem deve usa **Devolver** para informar o pagamento; o saldo só baixa após a confirmação de quem recebe. Quem recebe pode usar **Já recebi** ou **Recebi uma parte**.
+4. Abra **Ver detalhamento** para conferir as despesas, quem pagou, a parte devida em cada sentido, o valor compensado e os repasses confirmados da dupla. Quem deve usa **Devolver** para abrir o registro junto à dupla, confere o valor (total ou parcial) e clica em **Informar devolução** depois de enviar o dinheiro. O resultado ou eventual erro aparece junto ao repasse. O saldo só baixa após a confirmação de quem recebe. Quem recebe pode usar **Já recebi** ou **Recebi uma parte**.
 5. Selecione quem devolveu, quem recebeu, o valor e a data real do pagamento. A data pode estar em outro mês; a competência da dívida permanece a selecionada.
 6. Se desejar, anexe um comprovante JPG, PNG, WEBP ou PDF de até 5 MB.
 7. Após confirmar, o histórico mostra o recebimento e a dívida restante é recalculada.

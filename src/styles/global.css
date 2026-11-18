@@ -2915,6 +2915,18 @@ dialog {
   min-width: 0;
   font-size: 0.85rem;
 }
+.settlement-feedback,
+.settlement-return-form {
+  flex-basis: 100%;
+  min-width: 0;
+}
+.settlement-return-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
 .settlement-details summary {
   cursor: pointer;
 }

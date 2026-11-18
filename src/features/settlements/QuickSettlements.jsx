@@ -24,7 +24,15 @@ export function QuickSettlements({
   const [last, setLast] = useState(null);
   const [partial, setPartial] = useState('');
   const [amount, setAmount] = useState('');
+  const [returning, setReturning] = useState('');
+  const [returnAmount, setReturnAmount] = useState('');
+  const [reported, setReported] = useState(null);
   const lock = useRef(false);
+  const canReport = (transfer) =>
+    !readOnly &&
+    typeof onReport === 'function' &&
+    transfer.from === receiverId &&
+    !pendingReports.some((item) => item.from === transfer.from && item.to === transfer.to);
   async function run(operation) {
     if (lock.current) return;
     lock.current = true;
@@ -53,9 +61,36 @@ export function QuickSettlements({
       setAmount('');
     });
   }
+  function report(transfer) {
+    run(async () => {
+      const value = parseMoney(returnAmount);
+      if (value <= 0 || value > transfer.amount)
+        throw new Error(`Informe um valor maior que zero e de até ${money(transfer.amount)}.`);
+      if (!canReport(transfer))
+        throw new Error('Este repasse não está disponível para informar uma devolução.');
+      await onReport({ from: transfer.from, to: transfer.to, amount: value });
+      setReported({ from: transfer.from, to: transfer.to, amount: value });
+      setReturning('');
+      setReturnAmount('');
+    });
+  }
+  const wasReported = (transfer) =>
+    reported?.from === transfer.from && reported?.to === transfer.to;
+  const reportedNotice = reported && (
+    <p className="notice settlement-feedback" role="status">
+      Devolução de {money(reported.amount)} para {nameOf(reported.to)} informada. O saldo só baixa
+      depois que {nameOf(reported.to)} confirmar o recebimento.
+    </p>
+  );
   return (
     <div className="quick-settlements">
       <SettlementReviewNotice issues={settlementIssues} nameOf={nameOf} />
+      {!transfers.some(wasReported) && reportedNotice}
+      {error && !returning && (
+        <p className="notice error" role="alert">
+          {error}
+        </p>
+      )}
       {transfers.length > 0 && (
         <ul className="group-transfers">
           {transfers.map((transfer) => (
@@ -68,21 +103,73 @@ export function QuickSettlements({
               {pendingReports.some(
                 (item) => item.from === transfer.from && item.to === transfer.to,
               ) && <span className="pill pending">Aguardando confirmação nas solicitações</span>}
-              {!readOnly &&
-                onReport &&
-                transfer.from === receiverId &&
-                !pendingReports.some(
-                  (item) => item.from === transfer.from && item.to === transfer.to,
-                ) && (
-                  <button
-                    type="button"
-                    className="button primary"
-                    disabled={busy}
-                    onClick={() => run(() => onReport(transfer))}
-                  >
-                    {busy ? 'Salvando…' : 'Devolver'}
-                  </button>
-                )}
+              {canReport(transfer) && (
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={busy}
+                  aria-expanded={returning === `${transfer.from}:${transfer.to}`}
+                  onClick={() => {
+                    setReturning(`${transfer.from}:${transfer.to}`);
+                    setReturnAmount((transfer.amount / 100).toFixed(2).replace('.', ','));
+                    setError('');
+                    setReported(null);
+                  }}
+                >
+                  {busy ? 'Salvando…' : 'Devolver'}
+                </button>
+              )}
+              {canReport(transfer) && returning === `${transfer.from}:${transfer.to}` && (
+                <form
+                  className="settlement-return-form"
+                  aria-label={`Registrar devolução de ${nameOf(transfer.from)} para ${nameOf(transfer.to)}`}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    report(transfer);
+                  }}
+                >
+                  <p>
+                    {nameOf(transfer.from)} devolve para {nameOf(transfer.to)}. Falta devolver{' '}
+                    {money(transfer.amount)}.
+                  </p>
+                  <label className="field">
+                    Valor devolvido (R$)
+                    <MoneyInput
+                      autoFocus
+                      required
+                      inputMode="decimal"
+                      value={returnAmount}
+                      disabled={busy}
+                      onChange={(event) => setReturnAmount(event.target.value)}
+                    />
+                  </label>
+                  <p className="hint">
+                    Informe somente depois de enviar o dinheiro. {nameOf(transfer.to)} precisa
+                    confirmar o recebimento para baixar o saldo. Você pode informar uma parte.
+                  </p>
+                  {error && (
+                    <p className="notice error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  <div className="form-actions">
+                    <button className="button primary" disabled={busy}>
+                      {busy ? 'Enviando…' : 'Informar devolução'}
+                    </button>
+                    <button
+                      type="button"
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        setReturning('');
+                        setError('');
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
               {!readOnly &&
                 transfer.to === receiverId &&
                 !pendingReports.some(
@@ -144,6 +231,7 @@ export function QuickSettlements({
                     )}
                   </div>
                 )}
+              {wasReported(transfer) && reportedNotice}
               <SettlementDetails transfer={transfer} pairs={settlementPairs} nameOf={nameOf} />
             </li>
           ))}
@@ -182,11 +270,6 @@ export function QuickSettlements({
             Desfazer recebimento
           </button>
         </div>
-      )}
-      {error && (
-        <p className="notice error" role="alert">
-          {error}
-        </p>
       )}
     </div>
   );

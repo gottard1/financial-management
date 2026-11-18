@@ -263,6 +263,7 @@ export function SettlementsPanel({
           </p>
         </div>
         <QuickSettlements
+          key={scope + '|' + month}
           transfers={suggestions}
           settlementPairs={stats.settlementPairs}
           settlementIssues={stats.settlementIssues}

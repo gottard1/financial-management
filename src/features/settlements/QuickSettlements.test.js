@@ -10,7 +10,7 @@ let server, QuickSettlements;
 before(async () => {
   server = await createServer({
     configFile: false,
-    server: { middlewareMode: true, hmr: false, watch: null },
+    server: { middlewareMode: true, hmr: false, ws: false, watch: null },
     optimizeDeps: { noDiscovery: true, include: [] },
     appType: 'custom',
   });
